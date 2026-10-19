@@ -213,10 +213,18 @@ class Main extends hxd.App {
 
 	static function main() {
 		// h3d.mat.PbrMaterialSetup.set();
+		#if gles
+		// OpenGL ES 3.0 (hlsdl built with WITH_SDL_GLES): flags 1|8 = double buffer + ES profile.
+		// No MSAA: costly on mobile GPUs and not every ES driver offers multisampled EGL configs.
+		h3d.Engine.ANTIALIASING = 0;
+		#else
 		h3d.Engine.ANTIALIASING = 4;
+		#end
 		#if hl
 		sdl.Sdl.init();
-		#if !MACOS_BUNDLE
+		#if gles
+		sdl.Sdl.setGLOptions(3, 0, 24, 8, 1 | 8, 0);
+		#elseif !MACOS_BUNDLE
 		sdl.Sdl.setGLOptions(3, 2, 24, 8, 1, 4);
 		#end
 		#end
