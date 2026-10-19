@@ -1,5 +1,5 @@
 #!/bin/sh
-# MBHaxe launcher for PocketForge OS ([launch].exec in app.toml, tsp-0qwbh.5).
+# MBHaxe launcher for PocketForge OS ([launch].exec in app.toml, tsp-0qwbh.5, tsp-0qwbh.9).
 #
 # pf-app@<id>.service runs `pf-app-launch <id>`, which execs this file with the working
 # directory set to the app directory /opt/pocketforge/apps/<id>. That directory is read-only
@@ -15,6 +15,13 @@
 #   ALSOFT_CONF      <app>/alsoft.conf (OpenAL Soft: ALSA backend, 48 kHz, no HRTF).
 #   SDL_VIDEODRIVER  wayland (the session compositor; no GLX on the device).
 #   TMPDIR           a per-app directory under XDG_CACHE_HOME (Landlock grants no /tmp).
+#   MBHAXE_CACHE_DIR heaps' resource-converter cache, under XDG_CACHE_HOME (the game would otherwise
+#                    write data/tmp/, and the data directory may be read-only).
+#   MBHAXE_DATA_DIR  the game data fetched by the platform: app.toml [fetch] destination "var" puts
+#                    data/ in /var/lib/pocketforge/apps/<id>/, the parent of the XDG_STATE_HOME that
+#                    pf-app@ sets. Used when that directory exists (a symlink is passed on so the game
+#                    refuses it with its own message); otherwise the game uses data/ in the app
+#                    directory (the dev install). A caller's MBHAXE_DATA_DIR is kept as it is.
 # Everything else (WAYLAND_DISPLAY, XDG_RUNTIME_DIR, ...) comes from the unit and the
 # session environment file. Arguments are passed to marblegame unchanged.
 set -eu
@@ -27,11 +34,24 @@ state=${XDG_STATE_HOME:-${HOME:?neither XDG_STATE_HOME nor HOME is set}/.local/s
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/mbhaxe
 mkdir -p -- "$state" "$cache/tmp"
 
+if [ -z "${MBHAXE_DATA_DIR:-}" ]; then
+	case ${XDG_STATE_HOME:-} in
+	*/apps/org.pocketforge.mbhaxe/state)
+		fetched=${XDG_STATE_HOME%/state}/data
+		if [ -d "$fetched" ] || [ -L "$fetched" ]; then
+			MBHAXE_DATA_DIR=$fetched
+			export MBHAXE_DATA_DIR
+		fi
+		;;
+	esac
+fi
+
 LD_LIBRARY_PATH=$app/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 ALSOFT_CONF=$app/alsoft.conf
 SDL_VIDEODRIVER=wayland
 TMPDIR=$cache/tmp
-export LD_LIBRARY_PATH ALSOFT_CONF SDL_VIDEODRIVER TMPDIR
+MBHAXE_CACHE_DIR=${MBHAXE_CACHE_DIR:-$cache/converted}
+export LD_LIBRARY_PATH ALSOFT_CONF SDL_VIDEODRIVER TMPDIR MBHAXE_CACHE_DIR
 
 cd -- "$state"
 exec "$app/marblegame" "$@"

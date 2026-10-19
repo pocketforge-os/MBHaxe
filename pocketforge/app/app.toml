@@ -63,14 +63,20 @@ inputs = ["buttons", "dpad", "two_sticks"]
 [fetch]
 enabled = true
 reason = "Marble Blast Ultra game data (levels, textures, sounds) from the upstream MBHaxe release; PocketForge does not redistribute it."
+# "var": the fetched data lands in /var/lib/pocketforge/apps/org.pocketforge.mbhaxe/<dest>, outside
+# the read-only app directory. `launch` points the game at it (MBHAXE_DATA_DIR) when it exists and
+# puts the game's converter cache under XDG_CACHE_HOME, so the game never writes to the data. The
+# dev install (DEV-INSTALL.md) still stages data/ inside the app directory (pf-fetch.py --root),
+# which `launch` falls back to.
+destination = "var"
 
 # Upstream MBHaxe 1.3.2-mbu Linux release asset, pinned by exact URL, SHA256 and size
 # (the GitHub release asset digest matches). The archive holds one top-level directory,
 # MBHaxe-Ultra-Linux/, with the upstream x86_64 binaries next to data/. strip_components = 2
 # drops every member with two or fewer path components (the top-level directory and the
 # binaries beside data/) and maps MBHaxe-Ultra-Linux/data/<path> to data/<path>, so exactly
-# the contents of data/ are installed at dest. dest is relative to the app directory: the
-# game requires data/ to be a real directory next to marblegame.
+# the contents of data/ are installed at dest, relative to the destination above. The game
+# requires that directory to be a real directory (not a symlink) called data.
 [[fetch.files]]
 url = "https://github.com/RandomityGuy/MBHaxe/releases/download/1.3.2-mbu/MBHaxe-Ultra-Linux.tar.gz"
 sha256 = "515487e0f9eac03dd660ddedc856bee989c7921464aa96e3cb4f5407267573f2"

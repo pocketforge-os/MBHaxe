@@ -74,18 +74,21 @@ manifest to the PocketForge content-addressed artifact store from a trusted host
 - `app.toml`: the schema-2 descriptor. GLES 3.0, `buttons` + `stick` (the runtime vocabulary has no
   `gamepad` token), audio + input, no network, `memory_mib` a placeholder until the device window
   measures it. `[fetch]` pins the upstream `1.3.2-mbu` Linux release asset by URL, SHA256 and size
-  and installs only its `data/`.
+  and installs only its `data/`, at `destination = "var"` (`/var/lib/pocketforge/apps/<id>/data`).
 - `launch`: the `[launch].exec` wrapper. It puts the bundled `lib/` on `LD_LIBRARY_PATH`, sets
-  `ALSOFT_CONF`, `SDL_VIDEODRIVER=wayland` and `TMPDIR`, and runs the game from a writable directory
-  under `XDG_STATE_HOME` (the app directory is read-only under `pf-app@`).
+  `ALSOFT_CONF`, `SDL_VIDEODRIVER=wayland`, `TMPDIR`, `MBHAXE_CACHE_DIR` and, for fetched data,
+  `MBHAXE_DATA_DIR`, and runs the game from a writable directory under `XDG_STATE_HOME` (the app
+  directory is read-only under `pf-app@`).
 - `bundle.lock`: libopenal1, libsndio7.0, libturbojpeg0, libvorbisfile3 and libuv1, the same
   snapshot `.debs` the sysroot links against. The image does not install them, and bundling them
   leaves the image unchanged. `image-sonames.allow` lists what the image provides.
 - `pf-fetch.py`: the reference `[fetch]` implementation (pinned size and SHA256, GNU
   `strip_components`, unsafe members refused, atomic install, nothing changed on refusal);
   `tests/test-fetch.sh` is its red/green test.
-- `stage-app.sh`, `tests/launch-smoke.sh` and `DEV-INSTALL.md`: laptop staging, the launch smoke
-  under a private weston, and the device dev install and removal.
+- `stage-app.sh`, `tests/launch-smoke.sh`, `tests/data-dir-check.sh` and `DEV-INSTALL.md`: laptop
+  staging (`--data-layout dev`, data in the app directory, or `release`, data at the `[fetch]`
+  destination), the launch smoke under a private weston, the refusals for a bad data directory, and
+  the device dev install and removal.
 
 ```sh
 pocketforge/build/container.sh --work /path/to/work --arch aarch64 --app-root
@@ -138,10 +141,10 @@ needs the network:
   (1280x720 on the device), no frame-rate cap. Video Options adds Render Scale (50%, 75%, 100%;
   the 3D scene renders at that fraction of the window and the 2D interface stays sharp) and Frame
   Rate Cap (Off, 30, 60 FPS; it sleeps after each present).
-- Game data: `data/` must be a real directory next to the executable. A missing `data/` or a symlink
-  stops the game at start with a message on stderr and exit status 2 (heaps resolves resource paths
-  with realpath, so a symlinked tree loads nothing). The game creates `data/tmp/`, its cache for
-  converted resources, and warns on stderr if it cannot write there.
+- Game data: `data/` must be a real directory next to the executable, or the directory that
+  `MBHAXE_DATA_DIR` names (see [Data directory](#data-directory)). A missing data directory or a
+  symlink stops the game at start with a message on stderr and exit status 2 (heaps resolves
+  resource paths with realpath, so a symlinked tree loads nothing).
 - Settings (`settings.json`) and `console.log` are written to the current directory, so the launcher
   should start the game in a writable per-user directory.
 
@@ -177,6 +180,28 @@ passes only if the game exits with status 0:
 python3 pocketforge/walkthrough/gamepad_walkthrough.py --game-dir <dir with marblegame and data/> \
     --shot-dir <dir> --env WAYLAND_DISPLAY=<socket> --env SDL_VIDEODRIVER=wayland ...
 ```
+
+## Data directory
+
+HashLink desktop builds, not only `-D handheld`, read two environment variables
+(`src/DataDir.hx`):
+
+- `MBHAXE_DATA_DIR`: the game data directory, used instead of `data/` next to the executable. It
+  must be a real directory called `data`, because resources resolve as `data/...` under its
+  parent. A symlink, a missing directory or another name stops the game at start with a message
+  on stderr and exit status 2.
+- `MBHAXE_CACHE_DIR`: heaps' converter cache (fonts converted at first use), used instead of
+  `data/tmp/`. The game creates the directory.
+
+With neither variable set, a desktop build behaves as upstream does. If either is set, and always
+in the `-D handheld` build, the data directory is checked at start. If `data/tmp/` cannot be
+written and `MBHAXE_CACHE_DIR` is unset, the cache moves to `$XDG_CACHE_HOME/mbhaxe/converted`
+(default `~/.cache`), so read-only game data works. Settings, `console.log`, replays and screenshots
+stay in the current directory.
+
+The PocketForge app's `launch` uses both variables: data fetched to
+`/var/lib/pocketforge/apps/<id>/data` (`[fetch] destination = "var"`), and the cache under
+`XDG_CACHE_HOME`. See `pocketforge/app/DEV-INSTALL.md`.
 
 ## Removed
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Red/green tests for pf-fetch.py (tsp-0qwbh.5) on synthetic archives. No network.
+# Red/green tests for pf-fetch.py (tsp-0qwbh.5, tsp-0qwbh.9) on synthetic archives. No network.
 #
 # usage: pocketforge/app/tests/test-fetch.sh [--work DIR] [--real-archive PATH]
 #   --real-archive PATH  also run the pinned app.toml against a local copy of the upstream
@@ -48,7 +48,7 @@ make("symlink.tar.gz", lambda t: add(t, "top/data/link", kind="sym", link="../..
 make("fifo.tar.gz", lambda t: add(t, "top/data/fifo", kind="fifo"))
 EOF
 
-toml() { # file archive [sha] [size] [url] -> app.toml with one [[fetch.files]] entry
+toml() { # file archive [sha] [size] [url] [destination] -> app.toml with one [[fetch.files]] entry
 	local sha=${3:-$(sha256sum "$2" | cut -d' ' -f1)} size=${4:-$(stat -c %s "$2")}
 	cat > "$1" <<EOF
 schema_version = 2
@@ -56,6 +56,7 @@ schema_version = 2
 id = "org.example.fixture"
 [fetch]
 enabled = true
+${6:+destination = \"$6\"}
 [[fetch.files]]
 url = "${5:-https://example.invalid/fixture.tar.gz}"
 sha256 = "$sha"
@@ -115,11 +116,35 @@ r=0; run --app-toml "$C/app.toml" --root "$C/root" --from-file "$GOOD" --replace
 [ $r = 0 ] && [ ! -e "$C/root/data/old.txt" ] && [ -f "$C/root/data/a.txt" ] \
 	&& [ "$(ls -A "$C/root")" = data ]; check replace-good-swaps $?
 
+# Destination roots: --root wins; else [fetch].destination ("var" -> --var-root, "home" ->
+# XDG_DATA_HOME or --data-home); no destination and no --root is refused, as is an unknown one.
+newcase dest-var; toml "$C/app.toml" "$GOOD" "" "" "" var; mkdir -p "$C/var"
+r=0; run --app-toml "$C/app.toml" --var-root "$C/var" --from-file "$GOOD" || r=1
+[ $r = 0 ] && grep -q "^fetch=PASS .* dest=$C/var/data " "$C/out" && [ "$(cat "$C/var/data/a.txt")" = alpha ] \
+	&& [ -z "$(ls -A "$C/root")" ]; check destination-var-installs-in-var-root $?
+newcase dest-root-wins; toml "$C/app.toml" "$GOOD" "" "" "" var; mkdir -p "$C/var"
+r=0; run --app-toml "$C/app.toml" --root "$C/root" --var-root "$C/var" --from-file "$GOOD" || r=1
+[ $r = 0 ] && [ -f "$C/root/data/a.txt" ] && [ -z "$(ls -A "$C/var")" ]; check root-overrides-destination $?
+newcase dest-home; toml "$C/app.toml" "$GOOD" "" "" "" home; mkdir -p "$C/xdg"
+r=0; XDG_DATA_HOME=$C/xdg run --app-toml "$C/app.toml" --from-file "$GOOD" || r=1
+[ $r = 0 ] && [ -f "$C/xdg/data/a.txt" ]; check destination-home-installs-in-xdg-data-home $?
+newcase dest-none; toml "$C/app.toml" "$GOOD"
+run --app-toml "$C/app.toml" --var-root "$C/root" --from-file "$GOOD" && r=0 || r=$?
+[ $r = 1 ] && grep -q 'has_no_destination' "$C/out" && [ -z "$(ls -A "$C/root")" ]; check no-destination-refused $?
+newcase dest-bad; toml "$C/app.toml" "$GOOD" "" "" "" opt
+run --app-toml "$C/app.toml" --root "$C/root" --from-file "$GOOD" && r=0 || r=$?
+[ $r = 1 ] && grep -q 'destination_must_be' "$C/out" && [ -z "$(ls -A "$C/root")" ]; check unknown-destination-refused $?
+newcase dest-var-missing-root; toml "$C/app.toml" "$GOOD" "" "" "" var
+run --app-toml "$C/app.toml" --var-root "$C/nonexistent" --from-file "$GOOD" && r=0 || r=$?
+[ $r = 1 ] && grep -q 'root_is_not_a_directory' "$C/out" && [ ! -e "$C/nonexistent" ]; check missing-destination-root-refused $?
+
 if [ -n "$REAL" ]; then
 	newcase real-wrong-sha
 	sed 's/^sha256 = "[0-9a-f]*"$/sha256 = "'"$ZERO"'"/' "$APP_TOML" > "$C/app.toml"
-	run --app-toml "$C/app.toml" --root "$C/root" --from-file "$REAL" && r=0 || r=$?
-	[ $r = 1 ] && grep -q '^fetch=FAIL reason=sha256_mismatch' "$C/out" && [ -z "$(ls -A "$C/root")" ]; check real-archive-wrong-sha256-refused $?
+	mkdir -p "$C/var"
+	run --app-toml "$C/app.toml" --var-root "$C/var" --from-file "$REAL" && r=0 || r=$?
+	[ $r = 1 ] && grep -q '^fetch=FAIL reason=sha256_mismatch' "$C/out" && [ -z "$(ls -A "$C/root")" ] \
+		&& [ -z "$(ls -A "$C/var")" ]; check real-archive-wrong-sha256-refused $?
 fi
 
 if [ "$fail" = 0 ]; then echo "test-fetch=PASS"; else echo "test-fetch=FAIL"; fi

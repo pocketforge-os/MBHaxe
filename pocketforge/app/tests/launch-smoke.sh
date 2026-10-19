@@ -1,27 +1,37 @@
 #!/bin/bash
 # Laptop smoke of the staged app through its launch wrapper, the way pf-app@ starts it
-# (tsp-0qwbh.5): read-only app directory, pf-app@-shaped XDG_STATE_HOME/XDG_CACHE_HOME, a private
-# headless weston, Zink over lavapipe forced to OpenGL ES 3.0, and the pf_diag autoplay.
+# (tsp-0qwbh.5, tsp-0qwbh.9): read-only app directory, pf-app@-shaped XDG_STATE_HOME/XDG_CACHE_HOME,
+# a private headless weston, Zink over lavapipe forced to OpenGL ES 3.0, and the pf_diag autoplay.
 #
 # usage: pocketforge/app/tests/launch-smoke.sh --root STAGING --out DIR [--timeout SECONDS]
-#   STAGING  stage-app.sh output of an x86_64 diag app root (opt/pocketforge/apps/<id>/ + data/)
+#                                              [--readonly-data]
+#   STAGING  stage-app.sh output of an x86_64 diag app root, either layout:
+#            dev      opt/pocketforge/apps/<id>/ with data/ inside it;
+#            release  opt/pocketforge/apps/<id>/ without data/, plus
+#                     var/lib/pocketforge/apps/<id>/data/ (the [fetch] destination "var"). The data
+#                     is hard-linked (else copied) into OUT's /var/lib/pocketforge/apps/<id>/data,
+#                     beside the state directory, as pf-app@ would find it.
 #   DIR      evidence directory (new or empty)
+#   --readonly-data  release layout: also make the data directories read-only
 #
 # Checks: launch exits 0; GL_VERSION is OpenGL ES 3.0 on zink; the diag exit line reports 0 GL
 # errors; every bundled library and libhl/the hdlls are mapped from the app directory (not the
 # host); settings.json and console.log land in the state directory and nothing is written to the
-# app directory (SHA256SUMS still verify, no new files). Reports peak RSS (VmHWM) and the app size.
+# app directory (SHA256SUMS still verify, no new files); the game data is the layout's (launch sets
+# MBHAXE_DATA_DIR only for the release layout), nothing is written to it, and the converter cache is
+# MBHAXE_CACHE_DIR under the cache directory. Reports peak RSS (VmHWM) and the app size.
 # Weston and the game are stopped by exact PID. Prints "PASS"/"FAIL reason=..." lines and
 # "RESULT PASS|FAIL"; exits 0 only if every check passed.
 # shellcheck disable=SC2015,SC2317,SC2012  # pass||fail one-liners, trap-only cleanup, ls for a report line
 set -uo pipefail
 APP_ID=org.pocketforge.mbhaxe
-ROOT='' OUT='' TIMEOUT=600
+ROOT='' OUT='' TIMEOUT=600 RO_DATA=0
 while [ $# -gt 0 ]; do
 	case $1 in
 	--root) ROOT=$2; shift 2 ;;
 	--out) OUT=$2; shift 2 ;;
 	--timeout) TIMEOUT=$2; shift 2 ;;
+	--readonly-data) RO_DATA=1; shift ;;
 	*) echo "FAIL reason=bad-argument $1"; exit 2 ;;
 	esac
 done
@@ -30,7 +40,16 @@ pass() { echo "PASS $*"; }
 fail() { echo "FAIL reason=$*"; FAILS=$((FAILS + 1)); }
 fatal() { echo "FAIL reason=$*"; echo "RESULT FAIL (setup)"; exit 1; }
 APP=$ROOT/opt/pocketforge/apps/$APP_ID
-[ -x "$APP/launch" ] && [ -x "$APP/marblegame" ] && [ -d "$APP/data" ] || fatal "no-staged-app $APP"
+[ -x "$APP/launch" ] && [ -x "$APP/marblegame" ] || fatal "no-staged-app $APP"
+SRC_VAR_DATA=$ROOT/var/lib/pocketforge/apps/$APP_ID/data
+if [ -d "$SRC_VAR_DATA" ]; then
+	LAYOUT=release
+	[ ! -e "$APP/data" ] || fatal "release-layout-with-app-data $APP/data"
+else
+	LAYOUT=dev
+	[ -d "$APP/data" ] || fatal "no-data $APP/data"
+	[ $RO_DATA = 0 ] || fatal "--readonly-data-needs-release-layout"
+fi
 for t in weston timeout sha256sum; do command -v "$t" >/dev/null || fatal "missing-tool $t"; done
 LVP_ICD=${PF_HARNESS_LVP_ICD:-}
 for f in /usr/share/vulkan/icd.d/lvp_icd.json /usr/share/vulkan/icd.d/lvp_icd.*.json; do
@@ -48,7 +67,16 @@ CONFIG=$OUT/var/lib/pocketforge/apps/$APP_ID/config
 CACHE=$OUT/var/cache/pocketforge/apps/$APP_ID
 mkdir -p "$STATE" "$CONFIG" "$CACHE" "$OUT/home" "$OUT/shots"
 chmod 0700 "$STATE" "$CONFIG" "$CACHE"
+if [ $LAYOUT = release ]; then
+	DATA=$OUT/var/lib/pocketforge/apps/$APP_ID/data
+	cp -al "$SRC_VAR_DATA" "$DATA" 2>/dev/null || { rm -rf "$DATA"; cp -a "$SRC_VAR_DATA" "$DATA"; } || fatal "stage-var-data"
+	[ $RO_DATA = 0 ] || find "$DATA" -type d -exec chmod a-w {} +
+else
+	DATA=$APP/data
+fi
+pass "layout $LAYOUT data=$DATA readonly_data=$RO_DATA"
 (cd "$APP" && find . -mindepth 1 | LC_ALL=C sort) > "$OUT/app-before.list"
+(cd "$DATA" && find . -mindepth 1 -printf '%p %s %T@\n' | LC_ALL=C sort) > "$OUT/data-before.list"
 # The app directory is read-only to the app (ReadOnlyPaths=, Landlock read+execute).
 find "$APP" -type d -exec chmod a-w {} +
 
@@ -58,6 +86,7 @@ cleanup() {
 	[ -n "$WPID" ] && kill -0 "$WPID" 2>/dev/null && { kill -TERM "$WPID"; wait "$WPID" 2>/dev/null; }
 	[ -n "$XDG" ] && rm -rf "$XDG"
 	find "$APP" -type d -exec chmod u+w {} + 2>/dev/null
+	[ "$RO_DATA" = 0 ] || find "$DATA" -type d -exec chmod u+w {} + 2>/dev/null
 }
 trap cleanup EXIT
 XDG=$(mktemp -d /tmp/pfs.XXXXXX) || fatal mktemp-xdg
@@ -126,11 +155,25 @@ fi
 grep -qx "ALSOFT_CONF=$APP/alsoft.conf" "$OUT/game.environ" && grep -qx "LD_LIBRARY_PATH=$APP/lib" "$OUT/game.environ" \
 	&& grep -qx "TMPDIR=$CACHE/mbhaxe/tmp" "$OUT/game.environ" && pass "launch environment (ALSOFT_CONF, LD_LIBRARY_PATH, TMPDIR)" \
 	|| fail "launch-environment $(grep -E '^(ALSOFT_CONF|LD_LIBRARY_PATH|TMPDIR|SDL_VIDEODRIVER)=' "$OUT/game.environ" | tr '\n' ' ')"
+if [ $LAYOUT = release ]; then
+	grep -qx "MBHAXE_DATA_DIR=$DATA" "$OUT/game.environ" && pass "MBHAXE_DATA_DIR=$DATA" \
+		|| fail "data-dir-env $(grep '^MBHAXE_DATA_DIR=' "$OUT/game.environ" || echo unset)"
+else
+	grep -q '^MBHAXE_DATA_DIR=' "$OUT/game.environ" && fail "data-dir-env-set-in-dev-layout $(grep '^MBHAXE_DATA_DIR=' "$OUT/game.environ")" \
+		|| pass "MBHAXE_DATA_DIR unset (data/ in the app dir)"
+fi
+grep -qx "MBHAXE_CACHE_DIR=$CACHE/mbhaxe/converted" "$OUT/game.environ" && [ -f "$CACHE/mbhaxe/converted/cache.dat" ] \
+	&& grep -q "Converter cache: .*/mbhaxe/converted/$" "$LOG" \
+	&& pass "converter cache in $CACHE/mbhaxe/converted ($(find "$CACHE/mbhaxe/converted" -type f | wc -l) files)" \
+	|| fail "converter-cache $(grep -o 'Converter cache: .*' "$LOG" | head -1)"
+(cd "$DATA" && find . -mindepth 1 -printf '%p %s %T@\n' | LC_ALL=C sort) > "$OUT/data-after.list"
+cmp -s "$OUT/data-before.list" "$OUT/data-after.list" && pass "data dir unchanged ($(wc -l < "$OUT/data-before.list") entries)" \
+	|| fail "data-dir-changed $(diff "$OUT/data-before.list" "$OUT/data-after.list" | head -3 | tr '\n' ' ')"
 [ -f "$STATE/mbhaxe/settings.json" ] && [ -f "$STATE/mbhaxe/console.log" ] && pass "settings.json and console.log in state dir" \
 	|| fail "state-files-missing $(ls -A "$STATE/mbhaxe" | tr '\n' ' ')"
 (cd "$APP" && find . -mindepth 1 | LC_ALL=C sort) > "$OUT/app-after.list"
 cmp -s "$OUT/app-before.list" "$OUT/app-after.list" && (cd "$APP" && sha256sum --quiet --strict -c SHA256SUMS) \
 	&& pass "app dir unchanged (same entries, SHA256SUMS verify)" || fail "app-dir-changed"
-echo "info peak_rss_kib=$HWM app_dir_bytes=$(du -sb "$APP" | cut -f1) data_bytes=$(du -sb "$APP/data" | cut -f1) state_bytes=$(du -sb "$STATE" | cut -f1) cache_bytes=$(du -sb "$CACHE" | cut -f1)"
+echo "info peak_rss_kib=$HWM app_dir_bytes=$(du -sb "$APP" | cut -f1) data_bytes=$(du -sb "$DATA" | cut -f1) state_bytes=$(du -sb "$STATE" | cut -f1) cache_bytes=$(du -sb "$CACHE" | cut -f1)"
 
 if [ $FAILS = 0 ]; then echo "RESULT PASS"; exit 0; else echo "RESULT FAIL ($FAILS)"; exit 1; fi
