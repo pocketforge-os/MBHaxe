@@ -122,8 +122,10 @@ while kill -0 $GPID 2>/dev/null; do
 		grep -q 'libopenal' "/proc/$CPID/maps" 2>/dev/null && cp "/proc/$CPID/maps" "$OUT/maps.txt" 2>/dev/null
 		h=$(sed -n 's/^VmHWM:[[:space:]]*\([0-9]*\) kB/\1/p' "/proc/$CPID/status" 2>/dev/null)
 		[ -n "$h" ] && [ "$h" -gt "$HWM" ] && HWM=$h
-		tr '\0' '\n' < "/proc/$CPID/environ" > "$OUT/game.environ" 2>/dev/null
-		readlink "/proc/$CPID/cwd" > "$OUT/game.cwd" 2>/dev/null
+		# Keep the last good sample: the process may exit between the checks above and these reads.
+		tr '\0' '\n' < "/proc/$CPID/environ" > "$OUT/game.environ.new" 2>/dev/null \
+			&& [ -s "$OUT/game.environ.new" ] && mv "$OUT/game.environ.new" "$OUT/game.environ"
+		c=$(readlink "/proc/$CPID/cwd" 2>/dev/null) && [ -n "$c" ] && echo "$c" > "$OUT/game.cwd"
 	fi
 	sleep 0.5
 done

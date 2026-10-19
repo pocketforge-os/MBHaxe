@@ -98,5 +98,7 @@ fi
 	[ -z "$RENDER" ] || echo "usr/share/pocketforge/app-policy/$APP_ID.resources.json"
 	[ -z "$RENDER" ] || echo "etc/systemd/system/pf-app@$APP_ID.service.d"
 } > "$ROOT/PF-STAGE.files"
-(cd "$ROOT" && find opt usr etc var -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 sha256sum) > "$ROOT/PF-STAGE.sha256"
-echo "stage=PASS root=$ROOT layout=$LAYOUT app=$APP files=$(wc -l < "$ROOT/PF-STAGE.sha256") bytes=$(du -sbc "$ROOT/opt" "$ROOT/var" 2>/dev/null | tail -1 | cut -f1)"
+tops=(opt)
+for d in usr etc var; do [ ! -d "$ROOT/$d" ] || tops+=("$d"); done
+(cd "$ROOT" && find "${tops[@]}" -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > "$ROOT/PF-STAGE.sha256"
+echo "stage=PASS root=$ROOT layout=$LAYOUT app=$APP files=$(wc -l < "$ROOT/PF-STAGE.sha256") bytes=$(cd "$ROOT" && du -sbc "${tops[@]}" | tail -n 1 | cut -f1)"
