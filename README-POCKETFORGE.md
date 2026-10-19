@@ -76,13 +76,73 @@ manifest to the PocketForge content-addressed artifact store from a trusted host
 - `-D offline`: online features are off. Http requests fail locally without opening a socket, and the
   master server websocket is never opened, so leaderboards, Marbleland, multiplayer and the changelog
   check stay off. The `stubs/datachannel` stub replaces hxDatachannel, so no WebRTC native is linked.
-- `-D handheld`: fresh settings default to vsync on and reflection detail 1.
+- `-D handheld`: the handheld build; see [Handheld build](#handheld-build).
 
 You can also add:
 
 - `-D pf_diag`: regression-harness diagnostics in `Main.hx`, controlled by environment variables:
-  mission autoplay, back-buffer PNG dumps, `glGetError` counting and a fixed exit frame. This define is
-  never part of the default build.
+  mission autoplay, back-buffer PNG dumps, `glGetError` counting and a fixed exit frame, plus a
+  `[diag]` log of menu and level state and screenshots on request (`MBHAXE_SHOT_REQ`) for the gamepad
+  walkthrough. This define is never part of the default build.
+- `-D pf_highp`: highp fragment shaders; see [Precision](#precision).
+
+## Handheld build
+
+`-D handheld` makes the game usable on a handheld with only its gamepad, and `-D offline` hides what
+needs the network:
+
+- Menus: the main menu ends with Quit in place of upstream's Return to Arcade, and the Ko-fi and
+  GitHub buttons are gone. `-D offline` also hides Multiplayer, Leaderboards, the changelog, Custom
+  Levels (Marbleland), the level-select Leaderboard button and the end-of-level score submission
+  with its name prompt. Options hide Import & Export (it needs a file dialog), Keyboard Controls and
+  the resolution choices (the compositor owns the output); Key Bindings is called Controls.
+- Everything is reachable with a gamepad: no screen needs a keyboard or mouse. Name dialogs that
+  remain (replays) prefill a default name, and the gamepad's confirm button accepts it.
+- Quit and window close (SDL_QUIT, which SDL also raises on SIGTERM and SIGINT) save settings, close
+  OpenAL and exit with status 0.
+- Fresh settings: vsync on, reflection detail 1 (sky only), render scale 100% at the window size
+  (1280x720 on the device), no frame-rate cap. Video Options adds Render Scale (50%, 75%, 100%;
+  the 3D scene renders at that fraction of the window and the 2D interface stays sharp) and Frame
+  Rate Cap (Off, 30, 60 FPS; it sleeps after each present).
+- Game data: `data/` must be a real directory next to the executable. A missing `data/` or a symlink
+  stops the game at start with a message on stderr and exit status 2 (heaps resolves resource paths
+  with realpath, so a symlinked tree loads nothing). The game creates `data/tmp/`, its cache for
+  converted resources, and warns on stderr if it cannot write there.
+- Settings (`settings.json`) and `console.log` are written to the current directory, so the launcher
+  should start the game in a writable per-user directory.
+
+The gamepad is the device's Xbox 360 identity pad (SDL's stock mapping): A confirms, B goes back,
+Start pauses, the d-pad and left stick move the selection. There is no L3/R3, L2/R2 are digital, and
+Guide is reserved by the system and never used.
+
+### Audio
+
+`pocketforge/app/alsoft.conf` configures OpenAL Soft for the device: the ALSA backend only, on the
+`default` PCM (plug, softvol, dmix at 48 kHz S16_LE), mixing at 48 kHz stereo with 1024-frame periods
+so ALSA does not resample. The app package ships it beside the game, and the launcher sets
+`ALSOFT_CONF=<app dir>/alsoft.conf`. OpenAL Soft reads `ALSOFT_CONF` after the system and per-user
+config files, so its keys win.
+
+### Precision
+
+On OpenGL ES, heaps declares `precision mediump float;` in fragment shaders and `highp` in vertex
+shaders. `-D pf_highp` (implemented in the pocketforge-os/heaps fork, `hxsl.GlslOut.FRAGMENT_HIGHP`)
+makes fragment shaders `highp` too, for comparing FP16 artifacts on GPUs that honour mediump. It is
+not part of the default build.
+
+### Gamepad walkthrough
+
+`pocketforge/walkthrough/gamepad_walkthrough.py` checks the handheld menus with a gamepad only. It
+creates a virtual pad with the device's identity through `/dev/uinput` (write access is enough, for
+example a logind seat ACL; no root), runs a `-D handheld -D pf_diag` build, and walks main menu, Help
+& Options, Video Options, Single Player, level start, pause, restart, Main Menu and Quit. Every step
+is confirmed from the game's `[diag]` state log, a screenshot is taken at each step, and the run
+passes only if the game exits with status 0:
+
+```sh
+python3 pocketforge/walkthrough/gamepad_walkthrough.py --game-dir <dir with marblegame and data/> \
+    --shot-dir <dir> --env WAYLAND_DISPLAY=<socket> --env SDL_VIDEODRIVER=wayland ...
+```
 
 ## Removed
 

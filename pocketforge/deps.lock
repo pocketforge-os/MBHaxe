@@ -9,7 +9,7 @@ NEKO_SHA256=0a57a3eca92359da75eb0500a15766319f45e8f9eb7cc105f9f40391946b2ce7
 
 # PocketForge forks, pinned by commit.
 HEAPS_REPO=https://github.com/pocketforge-os/heaps.git
-HEAPS_SHA=1016de5b0fe560e25b58b8be3fb0b9caf35cf12f
+HEAPS_SHA=8510842b438d8cc05e049ba954d735641fe5d985
 HASHLINK_REPO=https://github.com/pocketforge-os/hashlink.git
 HASHLINK_SHA=be2de2bac3b65b1c9266914c34163bbabd653a14
 

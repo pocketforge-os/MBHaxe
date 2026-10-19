@@ -50,7 +50,7 @@ Debian signing keys in `pocketforge/build/keys/` (from https://ftp-master.debian
 |---|---|---|---|
 | MBHaxe | https://github.com/pocketforge-os/MBHaxe | RandomityGuy/MBHaxe `mbu-port` @ `ad0c7851c8b5dc9471c6ac5ba7ded0064ad4a23f` | this commit |
 | hashlink | https://github.com/pocketforge-os/hashlink | RandomityGuy/hashlink `master` @ `e3e864e3fc9633cf448f13e333ebd5dca0866d11` | `be2de2bac3b65b1c9266914c34163bbabd653a14` |
-| heaps | https://github.com/pocketforge-os/heaps | RandomityGuy/heaps `master` @ `9317e1a4ac6bc6936a7d9062555081afedadc0ae` | `1016de5b0fe560e25b58b8be3fb0b9caf35cf12f` |
+| heaps | https://github.com/pocketforge-os/heaps | RandomityGuy/heaps `master` @ `9317e1a4ac6bc6936a7d9062555081afedadc0ae` | `8510842b438d8cc05e049ba954d735641fe5d985` |
 
 PocketForge series on top of each base:
 
@@ -58,7 +58,9 @@ PocketForge series on top of each base:
   `82fc09f6` optional x86-only JIT `hl` executable (WITH_HL_JIT); `3bc54f24` Linux OpenGL ES 3 mode
   (WITH_SDL_GLES / HL_GLES); `731abd82` executable path from /proc/self/exe before `$_`;
   merge `be2de2ba`.
-- heaps: `6371a992` GlDriver BGRA textures and cube maps valid on OpenGL ES 3; merge `1016de5b`.
+- heaps: `6371a992` GlDriver BGRA textures and cube maps valid on OpenGL ES 3; merge `1016de5b`;
+  `4a4b6f5f` GlslOut `-D pf_highp` highp fragment precision; `6262f5ac` GLSL precision test
+  (`pocketforge/tests/`); merge `8510842b`.
 - MBHaxe: see `git log ad0c7851..pocketforge`.
 
 hxDatachannel is not used: `stubs/datachannel/` carries its platform-neutral base classes, copied
@@ -75,7 +77,7 @@ inside the installed version directory.
 |---|---|---|---|
 | format | 3.8.0, https://lib.haxe.org/files/3.0/format-3,8,0.zip | `ea3a6725ee707d54965550d5331c8b1eab5c548c35b3680622fb0ffa15b509fd` | `997ea09817a237f97f7e971e0f01ab3b58ce5a43b2d1c41a5cd54c9f6feb493f` |
 | colyseus-websocket | 1.0.15, https://lib.haxe.org/files/3.0/colyseus-websocket-1,0,15.zip | `23020faa1de9ab33e6bef87c493e2a1c526377c095be23f666a0352b9761cf3d` | `7ac107d6d2eecf008c9dd171d84fac6044b5f4a395f5a492bf041aa31fe4497b` |
-| heaps | dev -> pocketforge-os/heaps @ `1016de5b0fe560e25b58b8be3fb0b9caf35cf12f` | git | git |
+| heaps | dev -> pocketforge-os/heaps @ `8510842b438d8cc05e049ba954d735641fe5d985` | git | git |
 | hashlink | dev -> pocketforge-os/hashlink @ `be2de2ba...` `other/haxelib` | git | git |
 | hlsdl | dev -> pocketforge-os/hashlink @ `be2de2ba...` `libs/sdl` | git | git |
 | hlopenal | dev -> pocketforge-os/hashlink @ `be2de2ba...` `libs/openal` | git | git |

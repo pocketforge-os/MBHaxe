@@ -6,7 +6,8 @@
 #                    natives), stubs/haxe/io/FPHelper.hx makes FPHelper thread-safe.
 #   -D gles          ES 3.0 context, no MSAA (see Main.hx).
 #   -D offline       Http/MasterServer never touch the network (see Http.hx).
-#   -D handheld      vsync on, low reflection detail by default (see Settings.hx).
+#   -D handheld      gamepad-only menus, clean quit, data/ check, handheld video defaults
+#                    (see README-POCKETFORGE.md, Handheld build).
 -cp stubs
 -cp src
 -lib heaps
