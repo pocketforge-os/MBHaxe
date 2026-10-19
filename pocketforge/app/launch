@@ -1,0 +1,37 @@
+#!/bin/sh
+# MBHaxe launcher for PocketForge OS ([launch].exec in app.toml, tsp-0qwbh.5).
+#
+# pf-app@<id>.service runs `pf-app-launch <id>`, which execs this file with the working
+# directory set to the app directory /opt/pocketforge/apps/<id>. That directory is read-only
+# for the app (ReadOnlyPaths= and Landlock read+execute), but the game writes settings.json,
+# console.log and data/replays/ to its working directory, so this wrapper changes to a
+# per-app directory under XDG_STATE_HOME (pf-app@ sets it to
+# /var/lib/pocketforge/apps/<id>/state, which Landlock grants read+write).
+#
+# Environment it sets:
+#   LD_LIBRARY_PATH  <app>/lib: the bundled Debian bookworm libraries (bundle.lock). The
+#                    hdlls carry no RUNPATH, so marblegame's RUNPATH $ORIGIN does not reach
+#                    their dependencies (libopenal.so.1, libturbojpeg.so.0, ...).
+#   ALSOFT_CONF      <app>/alsoft.conf (OpenAL Soft: ALSA backend, 48 kHz, no HRTF).
+#   SDL_VIDEODRIVER  wayland (the session compositor; no GLX on the device).
+#   TMPDIR           a per-app directory under XDG_CACHE_HOME (Landlock grants no /tmp).
+# Everything else (WAYLAND_DISPLAY, XDG_RUNTIME_DIR, ...) comes from the unit and the
+# session environment file. Arguments are passed to marblegame unchanged.
+set -eu
+
+self=$(readlink -f -- "$0")
+app=$(dirname -- "$self")
+[ -x "$app/marblegame" ] || { echo "mbhaxe launch: $app/marblegame is missing" >&2; exit 66; }
+
+state=${XDG_STATE_HOME:-${HOME:?neither XDG_STATE_HOME nor HOME is set}/.local/state}/mbhaxe
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/mbhaxe
+mkdir -p -- "$state" "$cache/tmp"
+
+LD_LIBRARY_PATH=$app/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+ALSOFT_CONF=$app/alsoft.conf
+SDL_VIDEODRIVER=wayland
+TMPDIR=$cache/tmp
+export LD_LIBRARY_PATH ALSOFT_CONF SDL_VIDEODRIVER TMPDIR
+
+cd -- "$state"
+exec "$app/marblegame" "$@"

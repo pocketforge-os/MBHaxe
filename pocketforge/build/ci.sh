@@ -1,7 +1,7 @@
 #!/bin/bash
 # CI entry point (forge-neutral): run as root in a job container whose image is PF_BASE_IMAGE.
 # Turns the base into the builder (toolchain.sh, same script as the Containerfile), checks the
-# pins, runs the gate red/green tests, then a --require-clean build.
+# pins, runs the gate red/green tests, then a --require-clean build plus the app root.
 #
 # usage: pocketforge/build/ci.sh <aarch64|x86_64> <product|diag> WORK
 # Writes the build's key=value results to stdout and, when the forge provides one, to
@@ -17,7 +17,7 @@ if [ ! -f /etc/pf-builder-packages.txt ]; then
 fi
 "$PF_BUILD_DIR/check-pins.sh"
 "$PF_BUILD_DIR/tests/gates-test.sh" --arch "$ARCH" --work "$WORK"
-"$PF_BUILD_DIR/build.sh" --arch "$ARCH" --variant "$VARIANT" --work "$WORK" --out "$WORK/out" --require-clean
+"$PF_BUILD_DIR/build.sh" --arch "$ARCH" --variant "$VARIANT" --work "$WORK" --out "$WORK/out" --require-clean --app-root
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
-	cat "$WORK/out/$ARCH-$VARIANT.env" >> "$GITHUB_OUTPUT"
+	cat "$WORK/out/$ARCH-$VARIANT.env" "$WORK/out/$ARCH-$VARIANT.app.env" >> "$GITHUB_OUTPUT"
 fi

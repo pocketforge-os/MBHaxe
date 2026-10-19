@@ -3,10 +3,11 @@
 #   - be built for ARCH (ELF machine; executables use the bookworm dynamic loader),
 #   - need no GLIBC symbol version above PF_MAX_GLIBC (and no GLIBC_PRIVATE), no GLIBCXX/CXXABI/GCC
 #     version above the gcc 12 ceilings in pins.lock,
-#   - have every DT_NEEDED in needed.allow, and never libGL/libGLX/libOpenGL/libGLU,
+#   - have every DT_NEEDED in needed.allow (or the --allow FILE, same format), and never
+#     libGL/libGLX/libOpenGL/libGLU,
 #   - carry no RPATH/RUNPATH other than $ORIGIN.
 #
-# usage: gates.sh --arch <aarch64|x86_64> DIR
+# usage: gates.sh --arch <aarch64|x86_64> [--allow FILE] DIR
 # Prints one "gate=<name> status=PASS|FAIL ..." line per gate and a final "gates=PASS|FAIL ..." line;
 # exits 1 if any gate fails. Needs readelf (binutils) only.
 set -euo pipefail
@@ -14,14 +15,15 @@ PF_BUILD_DIR=$(cd "$(dirname "$0")" && pwd)
 . "$PF_BUILD_DIR/lib.sh"
 . "$PF_BUILD_DIR/pins.lock"
 
-ARCH=''
+ARCH='' ALLOW=$PF_BUILD_DIR/needed.allow
 while [ $# -gt 1 ]; do
 	case $1 in
 	--arch) ARCH=$2; shift 2 ;;
+	--allow) ALLOW=$2; shift 2 ;;
 	*) break ;;
 	esac
 done
-DIR=${1:?usage: gates.sh --arch <aarch64|x86_64> DIR}
+DIR=${1:?usage: gates.sh --arch <aarch64|x86_64> [--allow FILE] DIR}
 [ -d "$DIR" ] || pf_die "not a directory: $DIR"
 pf_arch_info "$ARCH" >/dev/null
 case $ARCH in
@@ -31,7 +33,7 @@ esac
 
 ver_le() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$2" ]; }
 
-allowed=" $(awk -v a="$ARCH" '!/^#/ && NF==2 && ($1=="*" || $1==a) {print $2}' "$PF_BUILD_DIR/needed.allow" | tr '\n' ' ')"
+allowed=" $(awk -v a="$ARCH" '!/^#/ && NF==2 && ($1=="*" || $1==a) {print $2}' "$ALLOW" | tr '\n' ' ')"
 
 fail=0 files=0 max_glibc=GLIBC_0
 needed_all="" bad_machine="" bad_ver="" bad_needed="" bad_gl="" bad_path=""

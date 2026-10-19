@@ -5,11 +5,13 @@
 #   -> ABI gates (gates.sh) -> deterministic tarball + manifest.
 #
 # usage: pocketforge/build/build.sh --arch <aarch64|x86_64> [--variant product|diag]
-#                                   [--work DIR] [--out DIR] [--jobs N] [--require-clean]
+#                                   [--work DIR] [--out DIR] [--jobs N] [--require-clean] [--app-root]
 #   --variant diag   adds -D pf_diag (regression-harness build: autoplay, screenshots, GL error count)
 #   --work DIR       caches and intermediates (default <repo>/.pf-build, gitignored)
 #   --out DIR        artifacts (default WORK/out)
 #   --require-clean  refuse a dirty MBHaxe tree (release builds; CI)
+#   --app-root       also assemble the PocketForge app root (app-root.sh: bundled libraries,
+#                    launch, app.toml) from the artifact, cross-checked against this sysroot
 #
 # Runs in the builder container (container.sh, CI) or directly on a Linux host with apt-get,
 # dpkg-deb, cmake, ninja, git, curl, zstd and a gcc for the target. The container is the
@@ -17,7 +19,8 @@
 #
 # Output: OUT/mbhaxe-pf-<version>-<arch>[-diag].tar.zst (one top-level dir "mbhaxe-pf/"),
 # the same name with .manifest.json and .tar.zst.sha256, and OUT/<arch>-<variant>.env with
-# machine-readable results (also printed last).
+# machine-readable results (also printed last). With --app-root, also app-root.sh's outputs
+# (OUT/org.pocketforge.mbhaxe-<version>-<arch>[-diag].app.tar.zst, OUT/<arch>-<variant>.app.env).
 set -euo pipefail
 PF_BUILD_DIR=$(cd "$(dirname "$0")" && pwd)
 . "$PF_BUILD_DIR/lib.sh"
@@ -28,7 +31,7 @@ if [ -n "${PF_IN_BUILDER_CONTAINER:-}" ]; then
 	export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*'
 fi
 
-ARCH='' VARIANT=product WORK='' OUT='' JOBS=$(nproc) REQUIRE_CLEAN=0
+ARCH='' VARIANT=product WORK='' OUT='' JOBS=$(nproc) REQUIRE_CLEAN=0 APP_ROOT=0
 while [ $# -gt 0 ]; do
 	case $1 in
 	--arch) ARCH=$2; shift 2 ;;
@@ -37,7 +40,8 @@ while [ $# -gt 0 ]; do
 	--out) OUT=$2; shift 2 ;;
 	--jobs) JOBS=$2; shift 2 ;;
 	--require-clean) REQUIRE_CLEAN=1; shift ;;
-	-h | --help) sed -n '2,22p' "$0"; exit 0 ;;
+	--app-root) APP_ROOT=1; shift ;;
+	-h | --help) sed -n '2,23p' "$0"; exit 0 ;;
 	*) pf_die "unknown argument: $1" ;;
 	esac
 done
@@ -135,6 +139,10 @@ cp "$HL_SRC/include/minimp3/LICENSE" "$STAGE/licenses/minimp3.txt"   # fmt.hdll
 cp "$HEAPS_SRC/LICENSE" "$STAGE/licenses/heaps.txt"
 cp "$WORK/deps/toolchain/haxe/LICENSE.txt" "$STAGE/licenses/haxe.txt" # Haxe standard library
 cp "$HAXELIB_PATH"/colyseus-websocket/*/LICENSE "$STAGE/licenses/colyseus-websocket.txt"
+# The format haxelib zip carries no licence file: upstream's BSD-2 LICENSE (HaxeFoundation/format
+# 914c2fa2) is committed here. stubs/datachannel copies hxDatachannel classes (MIT, its LICENSE).
+cp "$PF_BUILD_DIR/licenses/haxe-format.txt" "$STAGE/licenses/haxe-format.txt"
+cp stubs/datachannel/LICENSE "$STAGE/licenses/hxDatachannel.txt"
 
 # --- gates ----------------------------------------------------------------------------------
 GATES_OUT=$("$PF_BUILD_DIR/gates.sh" --arch "$ARCH" "$STAGE") || { echo "$GATES_OUT" >&2; pf_die "ABI gates failed"; }
@@ -209,3 +217,7 @@ dirty=$DIRTY
 seconds=$(($(date +%s) - T0))
 EOF
 cat "$RESULT"
+if [ "$APP_ROOT" = 1 ]; then
+	"$PF_BUILD_DIR/app-root.sh" --build "$RESULT" --work "$WORK" --out "$OUT" \
+		--sysroot-debs "$WORK/sysroot-$DEBARCH/debs.sha256"
+fi
