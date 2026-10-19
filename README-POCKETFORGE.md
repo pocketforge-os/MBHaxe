@@ -24,8 +24,46 @@ repository with `haxelib dev`. It writes nothing outside the deps directory.
 The script handles the pins because hxml `-lib` cannot name a git commit, and hlsdl and hlopenal are
 subdirectories of the hashlink repository. The same hashlink checkout also supplies the C runtime and
 hdlls (built with CMake and `-DWITH_SDL_GLES=ON`) and the headers for compiling `native/marblegame.c`.
-The bookworm cross-build pipeline (sysroots, compiler wrappers, artifact upload) is separate work;
-`LOCK.md` records the exact build configuration.
+
+## Building the game (pipeline)
+
+`pocketforge/build/` turns pinned inputs into a gated, deterministic tarball in one step:
+
+```sh
+# reference build, in the builder container (podman or nerdctl; never Docker-branded tooling)
+pocketforge/build/container.sh --work /path/to/work --arch aarch64              # device build
+pocketforge/build/container.sh --work /path/to/work --arch x86_64 --variant diag # harness build
+# same script without a container (host gcc; gates still apply, hashes differ from the reference)
+pocketforge/build/build.sh --arch aarch64 --work /path/to/work
+```
+
+Steps, all from pins in `LOCK.md`, `pocketforge/deps.lock` and `pocketforge/build/pins.lock`:
+
+1. Builder (`Containerfile`, `toolchain.sh`): Debian bookworm base image pinned by digest, every
+   package from Debian snapshot 20260601T000000Z (InRelease signatures checked against
+   `pocketforge/build/keys/`), bookworm gcc 12 native and aarch64 cross.
+2. `setup-deps.sh`: Haxe, Neko, haxelibs and the heaps/hashlink forks.
+3. `sysroot.sh`: bookworm arm64/amd64 sysroot from the same snapshot (rootless, isolated apt).
+4. hashlink `libhl` + hdlls with `-DWITH_SDL_GLES=ON -DWITH_HL_JIT=OFF`, then Haxe->C and the
+   single-TU `marblegame` link with rpath `$ORIGIN`. A compiler wrapper confines headers, start
+   files and libraries to the sysroot (Ubuntu's cross gcc otherwise links its own glibc 2.39), and
+   `-ffile-prefix-map` keeps build paths out of the binaries.
+5. `gates.sh`: highest GLIBC symbol version <= 2.36 (bookworm), no GLIBCXX/CXXABI/GCC version above
+   gcc 12, every DT_NEEDED in `needed.allow`, never libGL, only `$ORIGIN` rpaths, right ELF machine
+   and loader. `tests/gates-test.sh` is the red/green test: stub and real probes that must trip each
+   gate, including a probe linked by the unwrapped host compiler (fails on Ubuntu 24.04's glibc 2.39).
+6. Output in `WORK/out/`: `mbhaxe-pf-<version>-<arch>[-diag].tar.zst` (top-level dir `mbhaxe-pf/`:
+   `marblegame`, `libhl.so.1`, the six hdlls, `licenses/`, `SHA256SUMS`, `MANIFEST.json`), the
+   manifest beside it, a `.sha256`, and `<arch>-<variant>.env` with key=value results (artifact,
+   sha256s, stage dir). The manifest records per-file sha256, the MBHaxe/hashlink/heaps commits,
+   the lock-file digests, the builder package-set digest and the sysroot .deb list digest.
+   `<version>` is `<upstream version>-pf.<commit date>.<commit sha10>`.
+
+Two builds of the same commit are byte-identical (tarball included). CI
+(`.github/workflows/pocketforge-build.yml`, logic in `pocketforge/build/ci.sh`) builds aarch64 twice
+on separate runners and compares, and builds the x86_64 `pf_diag` harness binary. Artifacts are
+never stored on GitHub: `pocketforge/build/publish-mm.sh` publishes a clean build's tarball and
+manifest to the PocketForge content-addressed artifact store from a trusted host.
 
 ## Build modes
 

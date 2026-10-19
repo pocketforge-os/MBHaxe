@@ -1,0 +1,99 @@
+# PocketForge MBHaxe build: two independent aarch64 builds from the same commit must produce
+# byte-identical marblegame and tarball (determinism), plus the x86_64 -D pf_diag build used by
+# the regression harness. All logic lives in pocketforge/build/ci.sh so the same steps run under
+# Forgejo Actions. Runners: the credential-free, LAN-isolated pf-public class (this repo is public).
+# No artifact upload: CI only proves the build; publish-mm.sh publishes from a trusted host.
+name: pocketforge-build
+
+on:
+  push:
+    branches: [pocketforge]
+  pull_request:
+    branches: [pocketforge]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pocketforge-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  aarch64-a:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, pf-public-ci]
+    timeout-minutes: 60
+    container:
+      image: docker.io/library/debian:bookworm-20260518@sha256:ed4fcc40bb1162b6d2d32e7bec15044d13963779abbe63f67f1cd62b06220519
+      env:
+        PF_IN_BUILDER_CONTAINER: "1"
+    outputs:
+      marblegame_sha256: ${{ steps.build.outputs.marblegame_sha256 }}
+      artifact_sha256: ${{ steps.build.outputs.artifact_sha256 }}
+      generated_c_tree_sha256: ${{ steps.build.outputs.generated_c_tree_sha256 }}
+    steps:
+      # The bare base image has no git, so the first checkout is a plain file download; it is
+      # enough to run toolchain.sh, which installs git, and the second checkout is a real clone.
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - run: pocketforge/build/toolchain.sh
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - id: build
+        run: pocketforge/build/ci.sh aarch64 product "$RUNNER_TEMP/pf-work"
+
+  aarch64-b:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, pf-public-ci]
+    timeout-minutes: 60
+    container:
+      image: docker.io/library/debian:bookworm-20260518@sha256:ed4fcc40bb1162b6d2d32e7bec15044d13963779abbe63f67f1cd62b06220519
+      env:
+        PF_IN_BUILDER_CONTAINER: "1"
+    outputs:
+      marblegame_sha256: ${{ steps.build.outputs.marblegame_sha256 }}
+      artifact_sha256: ${{ steps.build.outputs.artifact_sha256 }}
+      generated_c_tree_sha256: ${{ steps.build.outputs.generated_c_tree_sha256 }}
+    steps:
+      # The bare base image has no git, so the first checkout is a plain file download; it is
+      # enough to run toolchain.sh, which installs git, and the second checkout is a real clone.
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - run: pocketforge/build/toolchain.sh
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - id: build
+        run: pocketforge/build/ci.sh aarch64 product "$RUNNER_TEMP/pf-work"
+
+  x86_64-diag:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, pf-public-ci]
+    timeout-minutes: 60
+    container:
+      image: docker.io/library/debian:bookworm-20260518@sha256:ed4fcc40bb1162b6d2d32e7bec15044d13963779abbe63f67f1cd62b06220519
+      env:
+        PF_IN_BUILDER_CONTAINER: "1"
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - run: pocketforge/build/toolchain.sh
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - run: pocketforge/build/ci.sh x86_64 diag "$RUNNER_TEMP/pf-work"
+
+  determinism:
+    needs: [aarch64-a, aarch64-b]
+    runs-on: [self-hosted, pf-public-ci]
+    timeout-minutes: 5
+    steps:
+      - env:
+          A_GAME: ${{ needs.aarch64-a.outputs.marblegame_sha256 }}
+          B_GAME: ${{ needs.aarch64-b.outputs.marblegame_sha256 }}
+          A_TAR: ${{ needs.aarch64-a.outputs.artifact_sha256 }}
+          B_TAR: ${{ needs.aarch64-b.outputs.artifact_sha256 }}
+          A_GEN: ${{ needs.aarch64-a.outputs.generated_c_tree_sha256 }}
+          B_GEN: ${{ needs.aarch64-b.outputs.generated_c_tree_sha256 }}
+        run: |
+          set -eu
+          rc=0
+          for k in GAME TAR GEN; do
+            a=$(printenv "A_$k"); b=$(printenv "B_$k")
+            if [ -n "$a" ] && [ "$a" = "$b" ]; then echo "determinism=$k status=PASS sha256=$a"
+            else echo "determinism=$k status=FAIL a=$a b=$b"; rc=1; fi
+          done
+          exit "$rc"

@@ -1,0 +1,19 @@
+# PocketForge MBHaxe builder: pinned Debian bookworm + bookworm gcc 12 (native and aarch64 cross),
+# every package from the pinned Debian snapshot (pins.lock). Build context: pocketforge/build/.
+#
+#   podman build -t localhost/mbhaxe-pf-builder -f pocketforge/build/Containerfile pocketforge/build
+#
+# pocketforge/build/container.sh does this and runs build.sh inside. The FROM line must equal
+# PF_BASE_IMAGE in pins.lock (check-pins.sh). No Docker-specific syntax: any OCI builder
+# (Buildah/Podman, BuildKit, nerdctl) works.
+FROM docker.io/library/debian:bookworm-20260518@sha256:ed4fcc40bb1162b6d2d32e7bec15044d13963779abbe63f67f1cd62b06220519
+
+ENV PF_IN_BUILDER_CONTAINER=1 \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+
+COPY pins.lock lib.sh toolchain.sh /opt/pf-build/
+COPY keys/ /opt/pf-build/keys/
+RUN /opt/pf-build/toolchain.sh
+
+WORKDIR /src

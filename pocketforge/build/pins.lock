@@ -1,0 +1,26 @@
+# PocketForge MBHaxe build pipeline pins (shell-sourceable; read by build.sh, sysroot.sh,
+# toolchain.sh and check-pins.sh). Haxe-side pins live in ../deps.lock; the human-readable
+# mirror of both is ../../LOCK.md. Change them together.
+
+# Builder container base: Debian bookworm, OCI image index digest (amd64 is used; the
+# Haxe/Neko release binaries are linux64). Dated tag = last one before the snapshot below,
+# so the snapshot only ever upgrades the base. .github/workflows/pocketforge-build.yml
+# repeats this reference; check-pins.sh enforces that they match.
+PF_BASE_IMAGE=docker.io/library/debian:bookworm-20260518@sha256:ed4fcc40bb1162b6d2d32e7bec15044d13963779abbe63f67f1cd62b06220519
+
+# Every Debian package (builder toolchain and target sysroots) comes from this snapshot,
+# signature-checked against keys/*.asc (Debian archive/release keys, ftp-master.debian.org).
+PF_DEBIAN_SNAPSHOT=20260601T000000Z
+
+# Builder toolchain installed into the base image by toolchain.sh (bookworm gcc 12: the same
+# compiler generation as the device's bookworm userspace).
+PF_HOST_PACKAGES="gcc-12 gcc-12-aarch64-linux-gnu binutils binutils-aarch64-linux-gnu binutils-x86-64-linux-gnu cmake ninja-build pkgconf git curl ca-certificates zstd file"
+
+# Target sysroot contents (apt resolves dependencies; no recommends). Same list for both arches.
+PF_SYSROOT_PACKAGES="libc6-dev libsdl2-dev libegl-dev libgles-dev libopenal-dev libpng-dev libturbojpeg0-dev libvorbis-dev libogg-dev zlib1g-dev libuv1-dev libmbedtls-dev"
+
+# ABI ceilings enforced by gates.sh: device userspace is bookworm (glibc 2.36, gcc 12).
+PF_MAX_GLIBC=2.36
+PF_MAX_GLIBCXX=3.4.30
+PF_MAX_CXXABI=1.3.13
+PF_MAX_GCC=12.0.0
