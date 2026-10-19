@@ -51,8 +51,9 @@ inputs = ["buttons", "stick"]
 # LOCK.md for orientation only. Kept within the device app budget so the placeholder
 # itself never refuses the launch.
 memory_mib = 400
-# Measured: app root plus fetched data/ on ext4, plus working space for settings,
-# replays and the converter cache.
+# Laptop staging (tsp-0qwbh.5): aarch64 app root 13.4 MiB + fetched data/ 70.8 MiB = 84.2 MiB;
+# state and cache after a run about 2 MiB. While [fetch] runs it also holds the 55.2 MiB archive.
+# 160 covers both with room for replays.
 storage_mib = 160
 
 [recommended]

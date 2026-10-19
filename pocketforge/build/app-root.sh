@@ -153,7 +153,11 @@ IMAGE_NEEDED=$(echo "$NEEDED_TOP,$NEEDED_LIB" | tr ',' '\n' | LC_ALL=C sort -u |
 done | tr '\n' ',' | sed 's/,$//')
 
 # --- manifest -------------------------------------------------------------------------------
-(cd "$S" && find . -type f ! -name SHA256SUMS ! -name APP-MANIFEST.json | sed 's|^\./||' | LC_ALL=C sort | xargs sha256sum) > "$S/SHA256SUMS"
+# Modes independent of the host umask: directories and executables 0755, other files 0644.
+find "$S" -type d -exec chmod 0755 {} +
+find "$S" -type f -perm /111 -exec chmod 0755 {} +
+find "$S" -type f ! -perm /111 -exec chmod 0644 {} +
+(cd "$S" && find . -type f ! -name SHA256SUMS ! -name APP-MANIFEST.json -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum) > "$S/SHA256SUMS"
 {
 	printf '{\n  "schema": "pocketforge.mbhaxe-app-root/v1",\n'
 	printf '  "app_id": "%s",\n  "app_version": "%s",\n  "arch": "%s",\n  "variant": "%s",\n' "$APP_ID" "$APP_VERSION" "$ARCH" "$VARIANT"
