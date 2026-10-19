@@ -17,7 +17,8 @@
 # What it does:
 #   1. stages <game-dir> and a real copy of <data-dir> under --out (canonical path, no symlinks:
 #      heaps resolves data paths with realpath);
-#   2. starts a private headless weston (pixman, kiosk shell, 1280x720) with its own XDG_RUNTIME_DIR;
+#   2. starts a private headless compositor (1280x720, pixman renderer) with its own XDG_RUNTIME_DIR:
+#      weston (kiosk shell) when it is weston >= 12, else cage (wlroots); see "Compositor" below;
 #   3. runs the game under strace (network syscalls) with SDL_VIDEODRIVER=wayland and Zink over
 #      lavapipe, forced to OpenGL ES 3.0 / GLSL ES 3.00 like the device; pf_diag autoplays the
 #      first beginner mission, dumps the menu and level frames and exits at a fixed frame;
@@ -33,7 +34,12 @@
 #   Weston and the game are stopped by exact PID. Prints one "PASS"/"FAIL reason=..." line per
 #   check and a final "RESULT PASS|FAIL"; exits 0 only if every check passed.
 #
-# Host requirements: weston (with kiosk-shell), Mesa with zink + lavapipe (lvp_icd.json),
+# Compositor (PF_HARNESS_COMPOSITOR=auto|weston|cage, default auto): weston >= 12 (--renderer) is
+# the validated default (Ubuntu 24.04, weston 13). Debian bookworm's weston 10 headless backend has
+# no wl_seat, and bookworm's SDL 2.26.5 dereferences a NULL seat in Wayland_InitMouse (SIGSEGV in
+# SDL_Init), so on an older weston auto picks cage 0.1.4 (wlroots 0.15 headless, pixman renderer,
+# which always advertises a seat; needs Xwayland installed and refuses to run as root).
+# Host requirements: weston >= 12 (with kiosk-shell) or cage + Xwayland, Mesa with zink + lavapipe (lvp_icd.json),
 # strace (ptrace allowed), python3 (stdlib only), a host C compiler ($CC, default cc) for the
 # es3strict shim, qemu-aarch64[-static] for the smoke.
 set -uo pipefail
@@ -84,13 +90,25 @@ fatal() { echo "FAIL reason=$*"; echo "RESULT FAIL (setup)"; exit 1; }
 [ -x "$GAME_SRC/marblegame" ] || fatal "no-game-binary $GAME_SRC/marblegame"
 [ -d "$DATA_SRC" ] || fatal "no-data-dir $DATA_SRC"
 CC=${CC:-cc}
-for t in weston strace python3 timeout "$CC"; do command -v "$t" >/dev/null || fatal "missing-tool $t"; done
+for t in strace python3 timeout "$CC"; do command -v "$t" >/dev/null || fatal "missing-tool $t"; done
 LVP_ICD=${PF_HARNESS_LVP_ICD:-}
 if [ -z "$LVP_ICD" ]; then
 	for f in /usr/share/vulkan/icd.d/lvp_icd.json /usr/share/vulkan/icd.d/lvp_icd.*.json; do
 		[ -f "$f" ] && { LVP_ICD=$f; break; }
 	done
 fi
+COMPOSITOR=${PF_HARNESS_COMPOSITOR:-auto}
+if [ "$COMPOSITOR" = auto ]; then
+	if command -v weston >/dev/null && weston --help 2>&1 | grep -q -- '--renderer'; then COMPOSITOR=weston
+	elif command -v cage >/dev/null; then COMPOSITOR=cage
+	else fatal "missing-tool weston>=12 or cage"; fi
+fi
+case $COMPOSITOR in
+	weston) command -v weston >/dev/null || fatal "missing-tool weston" ;;
+	cage) command -v cage >/dev/null || fatal "missing-tool cage"
+		[ "$(id -u)" != 0 ] || fatal "cage-refuses-root (run the harness as an unprivileged user)" ;;
+	*) fatal "bad-compositor $COMPOSITOR (auto, weston or cage)" ;;
+esac
 [ -n "$LVP_ICD" ] && [ -f "$LVP_ICD" ] || fatal "no-lavapipe-icd (install mesa-vulkan-drivers or set PF_HARNESS_LVP_ICD)"
 QEMU=""
 if [ $SKIP_QEMU = 0 ]; then
@@ -111,9 +129,11 @@ echo "harness out=$OUT game=$GAME_SRC data=$DATA_SRC"
 echo "game sha256 $(sha256sum "$GAME_SRC/marblegame" | cut -d' ' -f1)"
 
 # ---- stage -----------------------------------------------------------------------------------
-WPID="" GPID="" XDG=""
+WPID="" GPID="" XDG="" CPID=""
 cleanup() {
 	[ -n "$GPID" ] && kill -0 "$GPID" 2>/dev/null && kill -TERM "$GPID" 2>/dev/null
+	# cage's placeholder client: stopping it makes cage exit by itself
+	[ -n "$CPID" ] && kill -0 "$CPID" 2>/dev/null && { kill -TERM "$CPID"; sleep 1; }
 	[ -n "$WPID" ] && kill -0 "$WPID" 2>/dev/null && { kill -TERM "$WPID"; wait "$WPID" 2>/dev/null; }
 	[ -n "${XDG:-}" ] && rm -rf "$XDG"
 }
@@ -131,18 +151,32 @@ rm -f "$G/settings.json" "$G/console.log"
 "$CC" -shared -fPIC -O2 -o "$OUT/es3strict.so" "$HERE/es3strict.c" -ldl >"$OUT/es3strict-build.log" 2>&1 \
 	|| fatal "es3strict-build see $OUT/es3strict-build.log"
 
-# ---- private headless weston -----------------------------------------------------------------
-SOCK=pf-harness-$$
-XDG_RUNTIME_DIR=$XDG weston --backend=headless --renderer=pixman --width=1280 --height=720 \
-	--shell=kiosk --socket=$SOCK --no-config --log="$OUT/weston.log" >"$OUT/weston.stderr" 2>&1 &
-WPID=$!
+# ---- private headless compositor -------------------------------------------------------------
+if [ "$COMPOSITOR" = weston ]; then
+	SOCK=pf-harness-$$
+	echo "info compositor $(weston --version 2>&1 | head -n1)"
+	XDG_RUNTIME_DIR=$XDG weston --backend=headless --renderer=pixman --width=1280 --height=720 \
+		--shell=kiosk --socket=$SOCK --no-config --log="$OUT/weston.log" >"$OUT/weston.stderr" 2>&1 &
+	WPID=$!
+else
+	# cage runs one client and exits when it does: the client is a placeholder sleep whose PID is
+	# recorded so cleanup stops it by exact PID; the game connects to cage's socket as a second
+	# client. The private XDG_RUNTIME_DIR is empty, so the socket is wayland-0.
+	SOCK=wayland-0
+	echo "info compositor cage $(dpkg-query -W -f='${Version}' cage 2>/dev/null) wlroots headless, pixman"
+	XDG_RUNTIME_DIR=$XDG WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_HEADLESS_OUTPUTS=1 \
+		WLR_LIBINPUT_NO_DEVICES=1 cage -- sh -c 'echo $$ >"$XDG_RUNTIME_DIR/placeholder.pid"; exec sleep 100000' \
+		>"$OUT/weston.log" 2>&1 &
+	WPID=$!
+fi
 for _ in $(seq 100); do
-	[ -S "$XDG/$SOCK" ] && break
+	[ -S "$XDG/$SOCK" ] && { [ "$COMPOSITOR" = weston ] || [ -s "$XDG/placeholder.pid" ]; } && break
 	kill -0 $WPID 2>/dev/null || break
 	sleep 0.1
 done
-[ -S "$XDG/$SOCK" ] && kill -0 $WPID 2>/dev/null || fatal "weston-did-not-start see $OUT/weston.log"
-pass "weston pid=$WPID socket=$SOCK"
+[ -s "$XDG/placeholder.pid" ] && CPID=$(cat "$XDG/placeholder.pid")
+[ -S "$XDG/$SOCK" ] && kill -0 $WPID 2>/dev/null || fatal "compositor-did-not-start ($COMPOSITOR) see $OUT/weston.log"
+pass "compositor $COMPOSITOR pid=$WPID socket=$SOCK"
 
 # ---- x86_64 run: Zink over lavapipe, ES 3.0, under strace --------------------------------------
 STRACE_OPTS=(-f -qq -e trace=network -o "$OUT/strace.log")

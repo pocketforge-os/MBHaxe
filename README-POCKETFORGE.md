@@ -60,10 +60,20 @@ Steps, all from pins in `LOCK.md`, `pocketforge/deps.lock` and `pocketforge/buil
    `<version>` is `<upstream version>-pf.<commit date>.<commit sha10>`.
 
 Two builds of the same commit are byte-identical (tarball included). The CI workflow
-(`pocketforge/build/ci/pocketforge-build.yml`, logic in `pocketforge/build/ci.sh`) builds aarch64
-twice on separate runners and compares, and builds the x86_64 `pf_diag` harness binary. It is staged
-there until this repository is admitted to the pf-public runner class; activating it is a move to
-`.github/workflows/`. Artifacts are
+(`.github/workflows/pocketforge-build.yml`, logic in `pocketforge/build/ci.sh` and
+`tests/pf-harness/ci.sh`) runs on every push to `pocketforge` and on pull requests into it, on the
+credential-free pf-public runner class, in the pinned bookworm base image:
+
+- `aarch64-a`, `aarch64-b` and `determinism`: aarch64 is built twice on separate runners, and the
+  marblegame, tarball and generated-C sha256s must match (both values are printed to the log).
+- `harness`: the x86_64 `pf_diag` build, then `tests/pf-harness/ci.sh`, which builds aarch64 for the
+  qemu smoke, fetches the game data at job time with `pocketforge/app/pf-fetch.py` (the pinned
+  `app.toml` `[fetch]` URL, SHA256 and size) and runs `tests/pf-harness/run.sh` on bookworm's Mesa
+  22.3 Zink/lavapipe. The compositor there is cage, not weston: weston 10's headless backend has no
+  `wl_seat`, and bookworm's SDL 2.26.5 crashes in `Wayland_InitMouse` without one.
+
+CI uploads nothing: results, hashes and pngcheck output go to the job log, and the game data and
+screenshots never leave the job container. Artifacts are
 never stored on GitHub: `pocketforge/build/publish-mm.sh` publishes a clean build's tarball and
 manifest to the PocketForge content-addressed artifact store from a trusted host.
 

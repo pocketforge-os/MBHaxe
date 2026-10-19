@@ -4,8 +4,8 @@
 
 # Builder container base: Debian bookworm, OCI image index digest (amd64 is used; the
 # Haxe/Neko release binaries are linux64). Dated tag = last one before the snapshot below,
-# so the snapshot only ever upgrades the base. The CI workflow (ci/pocketforge-build.yml, later
-# .github/workflows/) repeats this reference; check-pins.sh enforces that they match.
+# so the snapshot only ever upgrades the base. The CI workflow (.github/workflows/pocketforge-build.yml)
+# repeats this reference; check-pins.sh enforces that they match.
 PF_BASE_IMAGE=docker.io/library/debian:bookworm-20260518@sha256:ed4fcc40bb1162b6d2d32e7bec15044d13963779abbe63f67f1cd62b06220519
 
 # Every Debian package (builder toolchain and target sysroots) comes from this snapshot,
