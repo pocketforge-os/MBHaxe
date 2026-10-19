@@ -170,6 +170,12 @@ class MasterServerClient {
 	}
 
 	public static function connectToMasterServer(onConnect:() -> Void, onError:() -> Void = null) {
+		#if offline
+		// -D offline: never open the master server websocket.
+		if (onError != null)
+			onError();
+		return;
+		#end
 		if (instance == null)
 			instance = new MasterServerClient(onConnect, onError);
 		else {
