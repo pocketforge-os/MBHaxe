@@ -118,6 +118,10 @@ class Main extends hxd.App {
 		#if hl
 		Console.log("System: " + Sys.systemName());
 		#end
+		#if hlsdl
+		Console.log("GL_VERSION: " + sdl.GL.getParameter(sdl.GL.VERSION) + " | GL_RENDERER: " + sdl.GL.getParameter(sdl.GL.RENDERER)
+			+ " | GL_SHADING_LANGUAGE_VERSION: " + sdl.GL.getParameter(sdl.GL.SHADING_LANGUAGE_VERSION));
+		#end
 
 		// try {
 		RTC.init();
