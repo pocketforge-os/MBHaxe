@@ -82,6 +82,7 @@ mkdir -p "$S/lib" "$S/licenses/debian"
 cp "$B/MANIFEST.json" "$S/BUILD-MANIFEST.json"
 cp "$APP_SRC/app.toml" "$APP_SRC/alsoft.conf" "$S/"
 install -m 0755 "$APP_SRC/launch" "$S/launch"
+install -m 0755 "$PF_BUILD_DIR/../../tests/pf-probe/probe-launch" "$S/probe-launch" # tsp-0qwbh.10
 APP_VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$APP_SRC/app.toml" | head -1)
 grep -q "^id = \"$APP_ID\"$" "$APP_SRC/app.toml" || pf_die "app.toml [app].id is not $APP_ID"
 

@@ -2,13 +2,15 @@
 # tsp-0qwbh.8). Runs on every push to pocketforge and on pull requests into it.
 #
 # - aarch64-a / aarch64-b: two independent aarch64 product builds of the same commit; the
-#   determinism job asserts byte-identical marblegame, tarball and generated C tree and prints
-#   both sha256s of each.
+#   determinism job asserts byte-identical marblegame, pf-probe, tarball and generated C tree and
+#   prints both sha256s of each.
 # - harness: the x86_64 -D pf_diag build, then tests/pf-harness/ci.sh: an aarch64 build for the
 #   qemu-aarch64 smoke, the game data fetched at job time by pocketforge/app/pf-fetch.py exactly as
 #   app.toml [fetch] pins it (upstream release URL + SHA256 + size; never committed, cached or
 #   uploaded), and tests/pf-harness/run.sh (Zink over lavapipe, OpenGL ES 3.0, es3strict,
-#   screenshot probes, no-network strace, qemu smoke).
+#   screenshot probes, no-network strace, qemu smoke), then tests/pf-probe/ci.sh: the window
+#   step-1 device probe (tsp-0qwbh.10) through the app root's probe-launch under the same
+#   compositor and Zink/lavapipe stack, its negative controls and its qemu-aarch64 smoke.
 #   It runs in the same pinned Debian bookworm job container as the builds (Mesa 22.3.6,
 #   SDL 2.26.5). One deviation from the tsp-0qwbh.3 Ubuntu setup: the headless compositor is cage
 #   0.1.4 (wlroots 0.15), not weston. Bookworm's weston 10 headless backend advertises no wl_seat,
@@ -51,6 +53,7 @@ jobs:
       marblegame_sha256: ${{ steps.build.outputs.marblegame_sha256 }}
       artifact_sha256: ${{ steps.build.outputs.artifact_sha256 }}
       generated_c_tree_sha256: ${{ steps.build.outputs.generated_c_tree_sha256 }}
+      probe_sha256: ${{ steps.build.outputs.probe_sha256 }}
     steps:
       # The bare base image has no git, so the first checkout is a plain file download; it is
       # enough to run toolchain.sh, which installs git, and the second checkout is a real clone.
@@ -75,6 +78,7 @@ jobs:
       marblegame_sha256: ${{ steps.build.outputs.marblegame_sha256 }}
       artifact_sha256: ${{ steps.build.outputs.artifact_sha256 }}
       generated_c_tree_sha256: ${{ steps.build.outputs.generated_c_tree_sha256 }}
+      probe_sha256: ${{ steps.build.outputs.probe_sha256 }}
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
@@ -105,6 +109,10 @@ jobs:
         run: pocketforge/build/ci.sh x86_64 diag "$RUNNER_TEMP/pf-work"
       - name: regression harness
         run: tests/pf-harness/ci.sh "$RUNNER_TEMP/pf-work"
+      # Runs even when the harness failed: the probe is independent evidence for the device window.
+      - name: window step-1 device probe (tsp-0qwbh.10)
+        if: ${{ !cancelled() }}
+        run: tests/pf-probe/ci.sh "$RUNNER_TEMP/pf-work"
 
   determinism:
     needs: [aarch64-a, aarch64-b]
@@ -118,10 +126,12 @@ jobs:
           B_TAR: ${{ needs.aarch64-b.outputs.artifact_sha256 }}
           A_GEN: ${{ needs.aarch64-a.outputs.generated_c_tree_sha256 }}
           B_GEN: ${{ needs.aarch64-b.outputs.generated_c_tree_sha256 }}
+          A_PROBE: ${{ needs.aarch64-a.outputs.probe_sha256 }}
+          B_PROBE: ${{ needs.aarch64-b.outputs.probe_sha256 }}
         run: |
           set -eu
           rc=0
-          for k in GAME TAR GEN; do
+          for k in GAME PROBE TAR GEN; do
             a=$(printenv "A_$k"); b=$(printenv "B_$k")
             echo "aarch64-a $k sha256=$a"
             echo "aarch64-b $k sha256=$b"
