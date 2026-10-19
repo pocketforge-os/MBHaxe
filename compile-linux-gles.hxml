@@ -1,0 +1,23 @@
+# Linux HL/C build rendering through OpenGL ES 3.0 (EGL/SDL2), offline.
+#
+# Pair with a hashlink built with -DWITH_SDL_GLES=ON (sdl.hdll links libGLESv2).
+# Differences from compile-linux.hxml:
+#   -cp stubs first: stubs/datachannel replaces -lib datachannel (no WebRTC/TLS
+#                    natives), stubs/haxe/io/FPHelper.hx makes FPHelper thread-safe.
+#   -D gles          ES 3.0 context, no MSAA (see Main.hx).
+#   -D offline       Http/MasterServer never touch the network (see Http.hx).
+#   -D handheld      vsync on, low reflection detail by default (see Settings.hx).
+-cp stubs
+-cp src
+-lib heaps
+-lib hlsdl
+-lib colyseus-websocket
+-D highDPI
+-D flow_border
+-D analyzer-optimize
+-D linux
+-D gles
+-D offline
+-D handheld
+-hl native/marblegame.c
+--main Main
