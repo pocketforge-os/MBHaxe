@@ -29,7 +29,8 @@ class ResourceLoader {
 	#if MACOS_BUNDLE
 	public static var fileSystem:FileSystem = new TorqueFileSystem(Path.normalize(Path.join([Path.directory(Sys.programPath()), "..", "Resources"])), null);
 	#else
-	public static var fileSystem:FileSystem = new TorqueFileSystem(".", null);
+	// "." is the executable's directory; MBHAXE_DATA_DIR moves the data (src/DataDir.hx).
+	public static var fileSystem:FileSystem = new TorqueFileSystem(src.DataDir.fsRoot(), null);
 	#end
 	#end
 	#if (js || android)
@@ -56,8 +57,14 @@ class ResourceLoader {
 	public static function init(scene2d:h2d.Scene, onLoadedFunc:Void->Void) {
 		Console.log("Initializing filesystem");
 		#if hl
+		#if (MACOS_BUNDLE || android)
 		@:privateAccess @:privateAccess cast(fileSystem, TorqueFileSystem).convert.tmpDir = "data/tmp/";
+		#else
+		@:privateAccess cast(fileSystem, TorqueFileSystem).convert.tmpDir = src.DataDir.converterTmpDir(@:privateAccess cast(fileSystem,
+			TorqueFileSystem).baseDir);
+		#end
 		Console.log("Filesystem Path: " + @:privateAccess cast(fileSystem, TorqueFileSystem).baseDir);
+		Console.log("Converter cache: " + @:privateAccess cast(fileSystem, TorqueFileSystem).convert.tmpDir);
 		#end
 		hxd.res.Resource.LIVE_UPDATE = false; // Disable live update to save frames
 		@:privateAccess hxd.res.Image.ENABLE_AUTO_WATCH = false;
