@@ -50,7 +50,7 @@ Debian signing keys in `pocketforge/build/keys/` (from https://ftp-master.debian
 |---|---|---|---|
 | MBHaxe | https://github.com/pocketforge-os/MBHaxe | RandomityGuy/MBHaxe `mbu-port` @ `ad0c7851c8b5dc9471c6ac5ba7ded0064ad4a23f` | this commit |
 | hashlink | https://github.com/pocketforge-os/hashlink | RandomityGuy/hashlink `master` @ `e3e864e3fc9633cf448f13e333ebd5dca0866d11` | `be2de2bac3b65b1c9266914c34163bbabd653a14` |
-| heaps | https://github.com/pocketforge-os/heaps | RandomityGuy/heaps `master` @ `9317e1a4ac6bc6936a7d9062555081afedadc0ae` | `1016de5b0fe560e25b58b8be3fb0b9caf35cf12f` |
+| heaps | https://github.com/pocketforge-os/heaps | RandomityGuy/heaps `master` @ `9317e1a4ac6bc6936a7d9062555081afedadc0ae` | `8510842b438d8cc05e049ba954d735641fe5d985` |
 
 PocketForge series on top of each base:
 
@@ -58,7 +58,9 @@ PocketForge series on top of each base:
   `82fc09f6` optional x86-only JIT `hl` executable (WITH_HL_JIT); `3bc54f24` Linux OpenGL ES 3 mode
   (WITH_SDL_GLES / HL_GLES); `731abd82` executable path from /proc/self/exe before `$_`;
   merge `be2de2ba`.
-- heaps: `6371a992` GlDriver BGRA textures and cube maps valid on OpenGL ES 3; merge `1016de5b`.
+- heaps: `6371a992` GlDriver BGRA textures and cube maps valid on OpenGL ES 3; merge `1016de5b`;
+  `4a4b6f5f` GlslOut `-D pf_highp` highp fragment precision; `6262f5ac` GLSL precision test
+  (`pocketforge/tests/`); merge `8510842b`.
 - MBHaxe: see `git log ad0c7851..pocketforge`.
 
 hxDatachannel is not used: `stubs/datachannel/` carries its platform-neutral base classes, copied
@@ -75,7 +77,7 @@ inside the installed version directory.
 |---|---|---|---|
 | format | 3.8.0, https://lib.haxe.org/files/3.0/format-3,8,0.zip | `ea3a6725ee707d54965550d5331c8b1eab5c548c35b3680622fb0ffa15b509fd` | `997ea09817a237f97f7e971e0f01ab3b58ce5a43b2d1c41a5cd54c9f6feb493f` |
 | colyseus-websocket | 1.0.15, https://lib.haxe.org/files/3.0/colyseus-websocket-1,0,15.zip | `23020faa1de9ab33e6bef87c493e2a1c526377c095be23f666a0352b9761cf3d` | `7ac107d6d2eecf008c9dd171d84fac6044b5f4a395f5a492bf041aa31fe4497b` |
-| heaps | dev -> pocketforge-os/heaps @ `1016de5b0fe560e25b58b8be3fb0b9caf35cf12f` | git | git |
+| heaps | dev -> pocketforge-os/heaps @ `8510842b438d8cc05e049ba954d735641fe5d985` | git | git |
 | hashlink | dev -> pocketforge-os/hashlink @ `be2de2ba...` `other/haxelib` | git | git |
 | hlsdl | dev -> pocketforge-os/hashlink @ `be2de2ba...` `libs/sdl` | git | git |
 | hlopenal | dev -> pocketforge-os/hashlink @ `be2de2ba...` `libs/openal` | git | git |
@@ -118,20 +120,22 @@ inside the installed version directory.
 work directories gave identical `marblegame`, tarball and manifest, and `-ffile-prefix-map` keeps
 work paths out of libhl and the hdlls. These `marblegame` hashes change only with the sources or
 pins; tarball and manifest hashes also cover the MBHaxe commit and are recorded per build.
+Values below: tsp-0qwbh.4 handheld series (built at MBHaxe `1240d2d4`, heaps `8510842b`; one run per
+variant, the reproducibility check is tsp-0qwbh.2's).
 
 | artifact | SHA256 |
 |---|---|
-| aarch64 `marblegame` (product) | `e992522325cbc36bccf4e51dacafd5ffda7eaa62f57be777a36fe4e9322d07b0` |
-| x86_64 `marblegame` (product) | `0391c9a9c38e3ff8bda9a5d3baff3a4bf2135b07f76a4d89263eb803575b236f` |
-| x86_64 `marblegame` (`-D pf_diag`) | `abe12afb82d4d3518c3e60ff534cb366b69a74d6611256d3e6d2fa4f26fa10ec` |
-| generated C tree (product, both arches) | `7313924c23bb9a4f8f7051e7bf8aea9e172564f20570356136c466bef355a28e` |
+| aarch64 `marblegame` (product) | `a02cbb72bd6a991cf5c01db3bf8f3d0652c8d44dacb205cdd26bf14a38b950aa` |
+| x86_64 `marblegame` (product) | `ed1310a7e8b38611bbbc5adbf6a31bfc57b5dc734d89dc963c06fe8268e6d512` |
+| x86_64 `marblegame` (`-D pf_diag`) | `69e51f6ee2d7cbb33f4461632c9ba116986a95a42fbbe3f42dd86fe9980f641d` |
+| generated C tree (product, both arches) | `e890903fa9452b3a0899b84b0a43b49cdca266377981e7829cf6f04b582a0389` |
 
 Gates on all three: highest GLIBC symbol version GLIBC_2.34; NEEDED within `pocketforge/build/needed.allow`;
 no libGL; rpath `$ORIGIN` only.
 
 ## Reference artifacts (tsp-0qwbh.1 reproduction, host gcc 13, 2026-10-19)
 
-Built from fresh clones of the forks at the SHAs above. Bit-reproducibility is not yet a requirement;
+Built from fresh clones of the forks at the tsp-0qwbh.1 pins (heaps `1016de5b`). Bit-reproducibility is not yet a requirement;
 the hdlls and libhl embed build paths and differ between build directories.
 
 | artifact | SHA256 |

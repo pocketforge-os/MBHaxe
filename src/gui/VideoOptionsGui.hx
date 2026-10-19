@@ -61,6 +61,8 @@ class VideoOptionsGui extends GuiImage {
 		optionCollection.extent = new Vector(815, 500);
 		innerCtrl.addChild(optionCollection);
 
+		// On a handheld the session compositor owns the output mode and size.
+		#if !handheld
 		var resolutionOpt = optionCollection.addOption(1, "Fullscreen Res", [
 			"1024 x 800",
 			"1280 x 720",
@@ -109,6 +111,7 @@ class VideoOptionsGui extends GuiImage {
 			return true;
 		}, 0.35);
 		displayOpt.setCurrentOption(Settings.optionsSettings.isFullScreen ? 0 : 1);
+		#end
 
 		#if hl
 		var vsyncOpt = optionCollection.addOption(1, "VSync", ["Disabled", "Enabled"], (idx) -> {
@@ -166,6 +169,25 @@ class VideoOptionsGui extends GuiImage {
 		else if (Settings.optionsSettings.maxPixelRatio == 100)
 			curPixelRatioIndex = 4;
 		pxOpt.setCurrentOption(curPixelRatioIndex);
+		#end
+
+		#if handheld
+		// Render scale: the 3D scene renders at this fraction of the window size (Renderer pixelRatio).
+		var scaleValues = [0.5, 0.75, 1.0];
+		var scaleOpt = optionCollection.addOption(1, "Render Scale", ["50%", "75%", "100%"], (idx) -> {
+			Settings.optionsSettings.maxPixelRatio = scaleValues[idx];
+			return true;
+		}, 0.35);
+		var curScale = scaleValues.indexOf(Settings.optionsSettings.maxPixelRatio);
+		scaleOpt.setCurrentOption(curScale == -1 ? 2 : curScale);
+
+		var capValues = [0, 30, 60];
+		var capOpt = optionCollection.addOption(1, "Frame Rate Cap", ["Off", "30 FPS", "60 FPS"], (idx) -> {
+			Settings.optionsSettings.fpsCap = capValues[idx];
+			return true;
+		}, 0.35);
+		var curCap = capValues.indexOf(Settings.optionsSettings.fpsCap);
+		capOpt.setCurrentOption(curCap == -1 ? 0 : curCap);
 		#end
 
 		var bottomBar = new GuiControl();

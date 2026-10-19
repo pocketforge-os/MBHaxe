@@ -64,9 +64,11 @@ class InputSelectGui extends GuiImage {
 		btnList.extent = new Vector(502, 500);
 		innerCtrl.addChild(btnList);
 
+		#if !handheld
 		btnList.addButton(0, 'Keyboard Controls', (e) -> {
 			MarbleGame.canvas.setContent(new KeyBindingsGui(pauseGui));
 		});
+		#end
 		btnList.addButton(0, 'Gamepad Controls', (e) -> {
 			MarbleGame.canvas.setContent(new ControllerBindingsGui(pauseGui));
 		});

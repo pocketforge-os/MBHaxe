@@ -128,6 +128,13 @@ class Main extends hxd.App {
 		Http.init();
 		haxe.MainLoop.add(() -> Http.loop());
 		Settings.init();
+		#if (hl && handheld)
+		// Window close / SDL_QUIT (also raised by SDL on SIGTERM and SIGINT) quits cleanly with status 0.
+		hxd.Window.getInstance().onClose = () -> {
+			MarbleGame.quitGame();
+			return true;
+		};
+		#end
 		Gamepad.init();
 		MPCustoms.loadMissionList();
 		ResourceLoader.init(s2d, () -> {
@@ -183,7 +190,15 @@ class Main extends hxd.App {
 	//   MBHAXE_SHOT_DIR=<dir> MBHAXE_SHOT_FRAMES=f1,f2,...  glReadPixels the back buffer to PNG
 	//   MBHAXE_GLCHECK=1                      log glGetError() per frame (first 50 errors)
 	//   MBHAXE_EXIT_FRAME=<n>                 Sys.exit(0) at frame n
+	//   MBHAXE_SHOT_REQ=<file>                when <file> appears, screenshot to MBHAXE_SHOT_DIR/<its
+	//                                         first line>.png, then delete it (scripted walkthroughs)
+	// [diag] lines also go to stdout (flushed): "[diag] gui A>B" when the canvas stack changes,
+	// "[diag] world ..." when the mission world, its ready state or the pause state changes,
+	// "[diag] world restarted" when the attempt clock jumps back (restart or respawn).
 	var diagFrame = 0;
+	var diagGuiState = "";
+	var diagWorldState = "";
+	var diagAttemptTime = 0.0;
 	var diagLoadedFrame = -1;
 	var diagGlErrors = 0;
 	var diagLastStamp = 0.0;
@@ -193,27 +208,50 @@ class Main extends hxd.App {
 		return v == null || v == "" ? d : v;
 	}
 
+	function diagLog(msg:String) {
+		Console.log("[diag] " + msg);
+		Sys.println("[diag] " + msg);
+		Sys.stdout().flush();
+	}
+
 	function diagUpdate() {
 		if (loaded && diagLoadedFrame < 0) {
 			diagLoadedFrame = diagFrame;
-			Console.log("[diag] loaded at frame " + diagFrame);
+			diagLog("loaded at frame " + diagFrame);
+		}
+		if (loaded && MarbleGame.canvas != null) {
+			var gui = [for (c in @:privateAccess MarbleGame.canvas.children) Type.getClassName(Type.getClass(c))].join(">");
+			if (gui != diagGuiState) {
+				diagGuiState = gui;
+				diagLog("gui " + gui + " at frame " + diagFrame);
+			}
+			var w = @:privateAccess marbleGame.world;
+			var ws = w == null ? "none" : (w._ready ? "ready" : "loading") + (@:privateAccess marbleGame.paused ? " paused" : "");
+			if (ws != diagWorldState) {
+				diagWorldState = ws;
+				diagLog("world " + ws + (w != null ? " " + w.mission.title : "") + " at frame " + diagFrame);
+			}
+			var t = w == null ? 0.0 : w.timeState.currentAttemptTime;
+			if (w != null && t + 1.0 < diagAttemptTime)
+				diagLog("world restarted (attempt clock " + Std.int(diagAttemptTime * 10) / 10 + " s -> " + Std.int(t * 10) / 10 + " s) at frame " + diagFrame);
+			diagAttemptTime = t;
 		}
 		var ap = diagEnv("MBHAXE_AUTOPLAY", "");
 		if (ap != "" && diagLoadedFrame >= 0 && diagFrame == diagLoadedFrame + Std.parseInt(diagEnv("MBHAXE_AUTOPLAY_DELAY", "300"))) {
 			var parts = ap.split(":");
 			var m = MissionList.missionList["ultra"][parts[0]][Std.parseInt(parts[1])];
-			Console.log("[diag] autoplay " + m.title + " (" + m.path + ") at frame " + diagFrame);
+			diagLog("autoplay " + m.title + " (" + m.path + ") at frame " + diagFrame);
 			marbleGame.playMission(m);
 		}
 		if (diagFrame % 120 == 0) {
 			var now = haxe.Timer.stamp();
 			if (diagLastStamp > 0)
-				Console.log("[diag] frame " + diagFrame + " avg frame time " + Std.int((now - diagLastStamp) / 120 * 10000) / 10 + " ms");
+				diagLog("frame " + diagFrame + " avg frame time " + Std.int((now - diagLastStamp) / 120 * 10000) / 10 + " ms");
 			diagLastStamp = now;
 		}
 		var ex = diagEnv("MBHAXE_EXIT_FRAME", "");
 		if (ex != "" && diagFrame >= Std.parseInt(ex)) {
-			Console.log("[diag] exit at frame " + diagFrame + ", GL errors seen: " + diagGlErrors);
+			diagLog("exit at frame " + diagFrame + ", GL errors seen: " + diagGlErrors);
 			Sys.exit(0);
 		}
 	}
@@ -225,12 +263,19 @@ class Main extends hxd.App {
 			while (err != 0) {
 				diagGlErrors++;
 				if (diagGlErrors <= 50)
-					Console.log("[diag] GL error 0x" + StringTools.hex(err) + " at frame " + diagFrame);
+					diagLog("GL error 0x" + StringTools.hex(err) + " at frame " + diagFrame);
 				err = sdl.GL.getError();
 			}
 		}
 		var dir = diagEnv("MBHAXE_SHOT_DIR", "");
-		if (dir != "" && diagEnv("MBHAXE_SHOT_FRAMES", "").split(",").indexOf(Std.string(diagFrame)) >= 0) {
+		var shotName = diagEnv("MBHAXE_SHOT_FRAMES", "").split(",").indexOf(Std.string(diagFrame)) >= 0 ? "frame" + diagFrame : null;
+		var req = diagEnv("MBHAXE_SHOT_REQ", "");
+		if (req != "" && sys.FileSystem.exists(req)) {
+			var lines = StringTools.trim(sys.io.File.getContent(req)).split("\n");
+			sys.FileSystem.deleteFile(req);
+			shotName = lines[0] != "" ? lines[0] : "frame" + diagFrame;
+		}
+		if (dir != "" && shotName != null) {
 			var w = hxd.Window.getInstance().width, h = hxd.Window.getInstance().height;
 			var raw = haxe.io.Bytes.alloc(w * h * 4);
 			sdl.GL.readPixels(0, 0, w, h, sdl.GL.RGBA, sdl.GL.UNSIGNED_BYTE, @:privateAccess raw.b);
@@ -238,9 +283,9 @@ class Main extends hxd.App {
 			for (y in 0...h)
 				out.blit((h - 1 - y) * w * 4, raw, y * w * 4, w * 4);
 			var pix = new hxd.Pixels(w, h, out, RGBA);
-			var f = haxe.io.Path.join([dir, "frame" + diagFrame + ".png"]);
+			var f = haxe.io.Path.join([dir, shotName + ".png"]);
 			sys.io.File.saveBytes(f, pix.toPNG());
-			Console.log("[diag] screenshot " + f + " (" + w + "x" + h + ")");
+			diagLog("screenshot " + f + " (" + w + "x" + h + ") at frame " + diagFrame);
 		}
 	}
 	#end
@@ -287,9 +332,66 @@ class Main extends hxd.App {
 		#if hl
 		e.driver.present();
 		#end
+		#if (hl && handheld)
+		capFrameRate();
+		#end
 	}
 
+	#if (hl && handheld)
+	var capFrameStart = 0.0;
+
+	// Optional frame rate cap (Video Options, Settings.optionsSettings.fpsCap; 0 = off).
+	// Sleeps after present so the CPU and GPU idle instead of rendering frames nobody needs.
+	function capFrameRate() {
+		var cap = Settings.optionsSettings.fpsCap;
+		var now = haxe.Timer.stamp();
+		if (cap > 0) {
+			var wait = capFrameStart + 1.0 / cap - now;
+			if (wait > 0.001) {
+				Sys.sleep(wait);
+				now = haxe.Timer.stamp();
+			}
+		}
+		capFrameStart = now;
+	}
+	#end
+
+	#if (hl && handheld)
+	// The game data must be a real directory next to the executable: heaps' file converter
+	// computes resource paths by stripping the base directory prefix from real paths, which
+	// breaks on a symlinked data/. data/tmp is the converter's cache (ResourceLoader sets it);
+	// it ships pre-populated, and new conversions are written there.
+	static function checkDataDir() {
+		function fail(msg:String) {
+			Sys.stderr().writeString("MBHaxe: " + msg + "\n");
+			Sys.exit(2);
+		}
+		var exeDir = haxe.io.Path.directory(Sys.programPath());
+		var data = haxe.io.Path.join([exeDir, "data"]);
+		if (!sys.FileSystem.exists(data) || !sys.FileSystem.isDirectory(data))
+			fail('game data not found: ${data} must be a directory holding the Marble Blast Ultra data.');
+		var realData = sys.FileSystem.fullPath(data);
+		var expected = haxe.io.Path.join([sys.FileSystem.fullPath(exeDir), "data"]);
+		if (realData != expected)
+			fail('${data} is a symlink to ${realData}; it must be a real directory next to the executable.');
+		var tmp = haxe.io.Path.join([data, "tmp"]);
+		try {
+			if (!sys.FileSystem.exists(tmp))
+				sys.FileSystem.createDirectory(tmp);
+			var probe = haxe.io.Path.join([tmp, ".write-test"]);
+			sys.io.File.saveContent(probe, "");
+			sys.FileSystem.deleteFile(probe);
+		} catch (e) {
+			Sys.stderr().writeString('MBHaxe: warning: cache directory ${tmp} is not writable (' + Std.string(e)
+				+ '); resources that are not already converted there will fail to load.\n');
+		}
+	}
+	#end
+
 	static function main() {
+		#if (hl && handheld)
+		checkDataDir();
+		#end
 		// h3d.mat.PbrMaterialSetup.set();
 		#if gles
 		// OpenGL ES 3.0 (hlsdl built with WITH_SDL_GLES): flags 1|8 = double buffer + ES profile.

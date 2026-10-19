@@ -47,14 +47,16 @@ MENU_FRAME=420 AUTOPLAY_AT=450 LEVEL_FRAME=1000 EXIT_FRAME=1100
 # Channel-order probes at 1280x720: NAME:X,Y,W,H:R,G,B:TOL (box mean, per-channel tolerance).
 # Picked from the tsp-0qwbh.3 runs; every box mean was identical across 11 runs (frames 400-450
 # for the menu, 900-1200 for the level, spike and fork builds), so they do not depend on timing.
-#   menu  coffee: the cyan "Buy Me a Coffee" button, bottom right (2D UI texture), B >> R
+#   menu  marble: the blue marble in the logo, right of "MARBLE" (2D UI texture), B >> R
 #   menu  logo:   the orange "ULTRA" logo lettering (2D UI texture), R >> B
+#   (-D handheld hides the cyan "Buy Me a Coffee" button the menu probe used before tsp-0qwbh.4;
+#   the logo marble box mean is 70,131,255 in every tsp-0qwbh.3 run and in the handheld build.)
 #   level floor:  the green floor tile left of the start pad (3D textured mesh), R >> B
 #   level marble: the blue marble resting on the start pad (3D mesh, env-mapped), B >> R
 # Each frame has one red-dominant and one blue-dominant probe whose R and B differ by more
 # than 2*TOL, so a red/blue swap (BGRA data read as RGBA) or an empty texture fails a probe.
 # (The blast meter HUD fills with game time and is deliberately not probed.)
-MENU_PROBES=("coffee:1170,694,60,4:32,201,239:24" "logo:400,330,30,10:137,108,47:24")
+MENU_PROBES=("marble:597,192,10,6:70,131,255:24" "logo:400,330,30,10:137,108,47:24")
 LEVEL_PROBES=("floor:300,300,40,20:139,183,72:24" "marble:650,470,20,20:76,134,240:24")
 
 die_usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
@@ -233,6 +235,8 @@ else
 	Q=$OUT/game-arm64
 	mkdir -p "$Q"
 	cp -a "$ARM_GAME"/marblegame "$ARM_GAME"/libhl.so* "$ARM_GAME"/*.hdll "$Q"/ || fatal "stage-arm64-game"
+	# -D handheld refuses to start without a real data/ directory next to the executable.
+	cp -al "$G/data" "$Q/data" 2>/dev/null || cp -r "$G/data" "$Q/data" || fatal "stage-arm64-data"
 	echo "arm64 game sha256 $(sha256sum "$Q/marblegame" | cut -d' ' -f1)"
 	(
 		cd "$Q" || exit 1

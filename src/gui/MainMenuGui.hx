@@ -79,6 +79,7 @@ class MainMenuGui extends GuiImage {
 		btnList.addButton(0, "Single Player Game", (sender) -> {
 			cast(this.parent, Canvas).setContent(new DifficultySelectGui());
 		});
+		#if !offline
 		btnList.addButton(0, "Multiplayer Game", (sender) -> {
 			if (MPCustoms.missionList.length == 0) {
 				cast(this.parent, Canvas).pushDialog(new MessageBoxOkDlg("Custom levels not loaded yet, please wait."));
@@ -95,6 +96,7 @@ class MainMenuGui extends GuiImage {
 		btnList.addButton(2, "Leaderboards", (e) -> {
 			cast(this.parent, Canvas).setContent(new LeaderboardsSelectGui());
 		}, 20);
+		#end
 		btnList.addButton(2, "Achievements", (e) -> {
 			cast(this.parent, Canvas).setContent(new AchievementsGui());
 		});
@@ -144,10 +146,16 @@ class MainMenuGui extends GuiImage {
 		btnList.addButton(3, "Help & Options", (sender) -> {
 			cast(this.parent, Canvas).setContent(new OptionsListGui());
 		});
+		#if !offline
 		btnList.addButton(2, "Changelog", (sender) -> {
 			MarbleGame.canvas.setContent(new VersionGui());
 		});
-		#if hl
+		#end
+		#if (hl && handheld)
+		btnList.addButton(4, "Quit", (sender) -> {
+			MarbleGame.quitGame();
+		});
+		#elseif hl
 		btnList.addButton(4, "Return to Arcade", (sender) -> {
 			#if hl
 			Sys.exit(0);
@@ -177,6 +185,7 @@ class MainMenuGui extends GuiImage {
 		versionText.text.filter = new DropShadow(1.414, 0.785, 0x3333337F, 1, 0, 0.7, 1, true);
 		this.addChild(versionText);
 
+		#if !handheld
 		var kofi = new GuiButton(loadButtonImages("data/ui/kofi1"));
 		kofi.horizSizing = Left;
 		kofi.vertSizing = Top;
@@ -206,6 +215,7 @@ class MainMenuGui extends GuiImage {
 			#end
 		}
 		this.addChild(github);
+		#end
 
 		#if js
 		var mbg = new GuiButton(loadStaticButtonImages("data/ui/icon_mbg"));
