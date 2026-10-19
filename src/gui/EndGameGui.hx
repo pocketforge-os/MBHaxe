@@ -209,6 +209,7 @@ class EndGameGui extends GuiImage {
 
 		var misPath = mission.isClaMission ? 'custom/mbu/${mission.id}' : mission.path;
 
+		#if !offline
 		if (!cheatsUsed && !mission.isLocal) {
 			var submitScore = () -> {
 				var lbScoreValue = score;
@@ -253,6 +254,7 @@ class EndGameGui extends GuiImage {
 				});
 			}
 		}
+		#end
 	}
 
 	override function onResize(width:Int, height:Int) {

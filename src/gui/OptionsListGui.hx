@@ -77,7 +77,7 @@ class OptionsListGui extends GuiImage {
 				});
 			}
 		} else {
-			btnList.addButton(3, 'Key Bindings', (e) -> {
+			btnList.addButton(3, #if handheld 'Controls' #else 'Key Bindings' #end, (e) -> {
 				MarbleGame.canvas.setContent(new InputSelectGui(pauseGui));
 			});
 		}
@@ -88,9 +88,11 @@ class OptionsListGui extends GuiImage {
 			btnList.addButton(3, 'Misc Options', (e) -> {
 				MarbleGame.canvas.setContent(new MiscOptionsGui(pauseGui));
 			});
+			#if !handheld
 			btnList.addButton(3, 'Import & Export', (e) -> {
 				MarbleGame.canvas.setContent(new ImportExportGui());
 			});
+			#end
 		}
 		btnList.addButton(5, 'How to Play', (e) -> {
 			MarbleGame.canvas.setContent(new AboutMenuOptionsGui(pauseGui));
