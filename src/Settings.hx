@@ -147,9 +147,9 @@ class Settings {
 		marbleShader: "ClassicGlassPureSphere",
 		rewindEnabled: false,
 		rewindTimescale: 1,
-		reflectionDetail: 2,
+		reflectionDetail: #if handheld 1 #else 2 #end,
 		maxPixelRatio: 1,
-		vsync: false,
+		vsync: #if handheld true #else false #end,
 		huntRandom: false,
 		fastLoad: false,
 		currentView: 0
@@ -399,7 +399,7 @@ class Settings {
 				optionsSettings.rewindTimescale = 1;
 			#if js
 			if (optionsSettings.reflectionDetail == null)
-				optionsSettings.reflectionDetail = 2;
+				optionsSettings.reflectionDetail = #if handheld 1 #else 2 #end;
 			if (controlsSettings.controllerVerticalCenter == null)
 				controlsSettings.controllerVerticalCenter = true;
 			if (optionsSettings.huntRandom == null)
