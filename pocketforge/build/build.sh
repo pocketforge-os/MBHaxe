@@ -130,6 +130,7 @@ for h in fmt openal sdl ssl ui uv; do cp "$HL_INST/lib/$h.hdll" "$STAGE/"; done
 cp LICENSE "$STAGE/licenses/MBHaxe.txt"
 cp "$HL_SRC/LICENSE" "$STAGE/licenses/hashlink.txt"
 cp "$HL_SRC/include/mbedtls/LICENSE" "$STAGE/licenses/mbedtls.txt"   # ssl.hdll (static)
+cp "$HL_SRC/include/mbedtls/apache-2.0.txt" "$STAGE/licenses/mbedtls-apache-2.0.txt"
 cp "$HL_SRC/include/minimp3/LICENSE" "$STAGE/licenses/minimp3.txt"   # fmt.hdll
 cp "$HEAPS_SRC/LICENSE" "$STAGE/licenses/heaps.txt"
 cp "$WORK/deps/toolchain/haxe/LICENSE.txt" "$STAGE/licenses/haxe.txt" # Haxe standard library
