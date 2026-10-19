@@ -27,7 +27,6 @@ import src.Gamepad;
 import src.Http;
 import src.Renderer;
 import src.MissionList;
-import src.Analytics;
 import net.MasterServerClient;
 import src.Leaderboards;
 import src.MPCustoms;
@@ -58,7 +57,6 @@ class Main extends hxd.App {
 		#if js
 		isDiscord = js.Browser.window.location.href.indexOf("discord") != -1;
 		if (isDiscord) {
-			Analytics.setURL(".proxy/analytics/api/send");
 			Leaderboards.setHost(".proxy/lb");
 			MasterServerClient.setServerIp(".proxy/mbomaster");
 		}
