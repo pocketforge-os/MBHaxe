@@ -15,10 +15,34 @@ when they were first downloaded (2026-10-18) and are verified on every fetch.
 | Haxe 4.3.6 linux64 | https://github.com/HaxeFoundation/haxe/releases/download/4.3.6/haxe-4.3.6-linux64.tar.gz | `810e1752c8eb3065dbff54c050b20a712ce276f407741f0bf94696b454a597ad` |
 | Neko 2.4.0 linux64 (haxelib runtime only) | https://github.com/HaxeFoundation/neko/releases/download/v2-4-0/neko-2.4.0-linux64.tar.gz | `0a57a3eca92359da75eb0500a15766319f45e8f9eb7cc105f9f40391946b2ce7` |
 
-Host compilers used for the reference builds (Ubuntu 24.04, not shipped): gcc and
-aarch64-linux-gnu-gcc 13.3.0-6ubuntu2~24.04.1, binutils 2.42, cmake 3.28.3, ninja 1.13.0.
-They are wrapped so they use only the bookworm sysroot's headers, start files and libraries
-(Ubuntu's cross gcc otherwise picks up its own glibc 2.39 headers and libs before `--sysroot`).
+### Builder container (`pocketforge/build/`, tsp-0qwbh.2)
+
+The reference builds run in the builder container; `pocketforge/build/pins.lock` is the
+machine-readable copy of this section.
+
+| item | pin |
+|---|---|
+| base image | `docker.io/library/debian:bookworm-20260518@sha256:ed4fcc40bb1162b6d2d32e7bec15044d13963779abbe63f67f1cd62b06220519` (OCI index; amd64 used) |
+| packages | Debian snapshot `20260601T000000Z` (same as the sysroots below), base dist-upgraded to it |
+| compilers | gcc-12 12.2.0-14+deb12u1 (x86_64), gcc-12-aarch64-linux-gnu 12.2.0-14cross1 |
+| tools | binutils 2.40-2, cmake 3.25.1-1, ninja-build 1.11.1-2~deb12u1, tar 1.34+dfsg-1.2+deb12u1, zstd 1.5.4+dfsg2-5 |
+
+The full builder package set is written to `/etc/pf-builder-packages.txt` in the image and its
+SHA256 is recorded in every build manifest. Both compilers are wrapped (`pf_write_toolchain` in
+`pocketforge/build/lib.sh`) so they use only the bookworm sysroot's headers, start files and
+libraries. The wrapper matters most on Ubuntu hosts, whose cross gcc picks up its own glibc 2.39
+headers and libs before `--sysroot`. Host (non-container) builds use the same wrapper around the
+host gcc; the tsp-0qwbh.1 references below came from Ubuntu 24.04 gcc 13.3.0-6ubuntu2~24.04.1.
+
+Debian signing keys in `pocketforge/build/keys/` (from https://ftp-master.debian.org/keys/):
+
+| file | fingerprint | SHA256 |
+|---|---|---|
+| archive-key-11.asc | `1F89983E0081FDE018F3CC9673A4F27B8DD47936` | `0b7dc94b880f0b63e2093394b113cafd870badb86e020a35614f49b9d83beb1e` |
+| archive-key-11-security.asc | `AC530D520F2F3269F5E98313A48449044AAD5C5D` | `716e79393c724d14ecba8be46e99ecbe1b689f67ceff3cb3cab28f6e69e8b8b8` |
+| archive-key-12.asc | `B8B80B5B623EAB6AD8775C45B7C5D7D6350947F8` | `c2a9a16fde95e037bafd0fa6b7e31f41b4ff1e85851de5558f19a2a2f0e955e2` |
+| archive-key-12-security.asc | `05AB90340C0C5E797F44A8C8254CF3B5AEC0A8F0` | `74f81645b4e3156d1e9a88c8dd9259271b89c7099d64af89a2a6996b592faa1f` |
+| release-12.asc | `4D64FEC119C2029067D6E791F8D2585B8783D481` | `521e9f6a9f9b92ee8d5ce74345e8cfd04028dae9db6f571259d584b293549824` |
 
 ## Source
 
@@ -70,18 +94,42 @@ inside the installed version directory.
 - Key versions: libc6 2.36-9+deb12u14, libsdl2 2.26.5+dfsg-1, libglvnd (libgles2/libegl1) 1.6.0-1,
   libopenal1 1:1.19.1-2, libturbojpeg0 1:2.1.5-2, libvorbisfile3 1.3.7-1, libpng16-16 1.6.39-2+deb12u5,
   zlib1g 1:1.2.13.dfsg-1, libuv1 1.44.2-1+deb12u1.
-- Per-.deb SHA256 lists are preserved with the spike evidence (`logs/debs-{arm64,amd64}.sha256`); the
-  committed sysroot build is tsp-0qwbh.2.
+- Built by `pocketforge/build/sysroot.sh` (rootless apt isolated from the host's apt configuration,
+  `dpkg-deb -x`, absolute symlinks made relative). Each build writes the per-.deb SHA256 list
+  (`debs.sha256`) and the manifest records its SHA256. Snapshot URLs are plain http, as Debian's
+  defaults: integrity comes from the signed InRelease files and the hashes they sign.
 
 ## Build configuration
 
-- hashlink: `cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_SDL_GLES=ON -DWITH_SQLITE=OFF -DWITH_VIDEO=OFF -DBUILD_TESTING=OFF`
-  (WITH_HL_JIT defaults OFF on aarch64).
-- game: `haxe compile-linux-gles.hxml` (product) or `haxe compile-linux-gles.hxml -D pf_diag` (regression
-  harness), then a single-TU `cc -O2 -std=c11 -D_GNU_SOURCE -fno-strict-aliasing -I native -I <hashlink>/src`
-  of `native/marblegame.c`, linked against the hdlls and `-lhl -lSDL2-2.0 -luv -lm -lpthread`, rpath `$ORIGIN`.
+`pocketforge/build/build.sh` is the authoritative recipe; in short:
 
-## Reference artifacts (tsp-0qwbh.1 reproduction, 2026-10-19)
+- hashlink: `cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_SDL_GLES=ON -DWITH_SQLITE=OFF -DWITH_VIDEO=OFF -DBUILD_TESTING=OFF -DWITH_HL_JIT=OFF`
+  with the sysroot toolchain file and `-ffile-prefix-map` for the work and source directories.
+- game: `haxe compile-linux-gles.hxml` (product) or `haxe compile-linux-gles.hxml -D pf_diag` (regression
+  harness), with the `-hl` output redirected into the work directory, then a single-TU
+  `cc -O2 -std=c11 -D_GNU_SOURCE -fno-strict-aliasing` of `marblegame.c` (`-I <gen> -I <hashlink>/src`),
+  linked against the hdlls, `libhl.so.1` and `-lSDL2-2.0 -luv -lm -lpthread`, rpath `$ORIGIN`, `--as-needed`.
+- gates: `pocketforge/build/gates.sh` (GLIBC <= 2.36, gcc 12 C++ ceilings, `needed.allow`, no libGL,
+  `$ORIGIN`-only rpaths).
+
+## Reference artifacts (pipeline, builder container, tsp-0qwbh.2)
+
+`pocketforge/build/container.sh` from the pins above. Builds are bit-reproducible: two runs in fresh
+work directories gave identical `marblegame`, tarball and manifest, and `-ffile-prefix-map` keeps
+work paths out of libhl and the hdlls. These `marblegame` hashes change only with the sources or
+pins; tarball and manifest hashes also cover the MBHaxe commit and are recorded per build.
+
+| artifact | SHA256 |
+|---|---|
+| aarch64 `marblegame` (product) | `e992522325cbc36bccf4e51dacafd5ffda7eaa62f57be777a36fe4e9322d07b0` |
+| x86_64 `marblegame` (product) | `0391c9a9c38e3ff8bda9a5d3baff3a4bf2135b07f76a4d89263eb803575b236f` |
+| x86_64 `marblegame` (`-D pf_diag`) | `abe12afb82d4d3518c3e60ff534cb366b69a74d6611256d3e6d2fa4f26fa10ec` |
+| generated C tree (product, both arches) | `7313924c23bb9a4f8f7051e7bf8aea9e172564f20570356136c466bef355a28e` |
+
+Gates on all three: highest GLIBC symbol version GLIBC_2.34; NEEDED within `pocketforge/build/needed.allow`;
+no libGL; rpath `$ORIGIN` only.
+
+## Reference artifacts (tsp-0qwbh.1 reproduction, host gcc 13, 2026-10-19)
 
 Built from fresh clones of the forks at the SHAs above. Bit-reproducibility is not yet a requirement;
 the hdlls and libhl embed build paths and differ between build directories.

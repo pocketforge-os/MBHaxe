@@ -26,3 +26,4 @@ macos-dist/data/
 
 # PocketForge pinned dependencies (pocketforge/setup-deps.sh)
 /.pf-deps/
+/.pf-build/
