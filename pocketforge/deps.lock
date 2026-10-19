@@ -1,0 +1,20 @@
+# PocketForge build inputs for MBHaxe (shell-sourceable; read by setup-deps.sh).
+# Human-readable mirror with provenance notes: ../LOCK.md. Change both together.
+
+# Toolchain tarballs (GitHub publishes no digest for these assets; SHA256 recorded locally 2026-10-18).
+HAXE_URL=https://github.com/HaxeFoundation/haxe/releases/download/4.3.6/haxe-4.3.6-linux64.tar.gz
+HAXE_SHA256=810e1752c8eb3065dbff54c050b20a712ce276f407741f0bf94696b454a597ad
+NEKO_URL=https://github.com/HaxeFoundation/neko/releases/download/v2-4-0/neko-2.4.0-linux64.tar.gz
+NEKO_SHA256=0a57a3eca92359da75eb0500a15766319f45e8f9eb7cc105f9f40391946b2ce7
+
+# PocketForge forks, pinned by commit.
+HEAPS_REPO=https://github.com/pocketforge-os/heaps.git
+HEAPS_SHA=1016de5b0fe560e25b58b8be3fb0b9caf35cf12f
+HASHLINK_REPO=https://github.com/pocketforge-os/hashlink.git
+HASHLINK_SHA=be2de2bac3b65b1c9266914c34163bbabd653a14
+
+# lib.haxe.org releases, pinned by version and zip SHA256.
+FORMAT_ZIP_URL=https://lib.haxe.org/files/3.0/format-3,8,0.zip
+FORMAT_ZIP_SHA256=ea3a6725ee707d54965550d5331c8b1eab5c548c35b3680622fb0ffa15b509fd
+COLYSEUS_WEBSOCKET_ZIP_URL=https://lib.haxe.org/files/3.0/colyseus-websocket-1,0,15.zip
+COLYSEUS_WEBSOCKET_ZIP_SHA256=23020faa1de9ab33e6bef87c493e2a1c526377c095be23f666a0352b9761cf3d

@@ -120,7 +120,6 @@ import modes.GameMode;
 import modes.NullMode;
 import modes.GameMode.GameModeFactory;
 import src.Renderer;
-import src.Analytics;
 import src.Debug;
 
 class MarbleWorld extends Scheduler {
@@ -2284,9 +2283,6 @@ class MarbleWorld extends Scheduler {
 					totalMPScore: 0
 				});
 			}
-			Analytics.trackLevelScore(mission.title, misPath,
-				gameMode.getScoreType() == Time ? Std.int(1000 * gameMode.getFinishScore()) : Std.int(gameMode.getFinishScore()),
-				Settings.levelStatistics[misPath].oobs, Settings.levelStatistics[misPath].respawns, Settings.optionsSettings.rewindEnabled);
 			if (!this.isWatching) {
 				var myScore = {
 					name: "Player",

@@ -23,7 +23,7 @@ class Http {
 	#end
 
 	public static function init() {
-		#if sys
+		#if (sys && !offline)
 		threadPool = new sys.thread.FixedThreadPool(4);
 		threadPool.run(() -> threadLoop());
 		threadPool.run(() -> threadLoop());
@@ -32,7 +32,7 @@ class Http {
 		#end
 	}
 
-	#if sys
+	#if (sys && !offline)
 	static function threadLoop() {
 		while (true) {
 			var req = requests.pop(true);
@@ -83,7 +83,7 @@ class Http {
 			postData: null,
 		};
 		#if sys
-		requests.add(req);
+		enqueue(req);
 		return req;
 		#else
 		return js.Browser.window.setTimeout(() -> {
@@ -104,7 +104,7 @@ class Http {
 			postData: postData
 		};
 		#if sys
-		requests.add(req);
+		enqueue(req);
 		return req;
 		#else
 		return js.Browser.window.setTimeout(() -> {
@@ -134,7 +134,7 @@ class Http {
 			file: data,
 		};
 		#if sys
-		requests.add(req);
+		enqueue(req);
 		return req;
 		#else
 		return js.Browser.window.setTimeout(() -> {
@@ -150,6 +150,19 @@ class Http {
 		}, 75);
 		#end
 	}
+
+	#if sys
+	static function enqueue(req:HttpRequest) {
+		#if offline
+		// Built with -D offline: no request ever leaves the process. Fail it
+		// asynchronously on the main loop, exactly like a network error.
+		req.fulfilled = true;
+		responses.add(() -> if (req.errCallback != null) req.errCallback("offline build: network disabled"));
+		#else
+		requests.add(req);
+		#end
+	}
+	#end
 
 	public static function loop() {
 		#if sys

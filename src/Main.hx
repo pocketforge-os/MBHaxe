@@ -27,7 +27,6 @@ import src.Gamepad;
 import src.Http;
 import src.Renderer;
 import src.MissionList;
-import src.Analytics;
 import net.MasterServerClient;
 import src.Leaderboards;
 import src.MPCustoms;
@@ -58,7 +57,6 @@ class Main extends hxd.App {
 		#if js
 		isDiscord = js.Browser.window.location.href.indexOf("discord") != -1;
 		if (isDiscord) {
-			Analytics.setURL(".proxy/analytics/api/send");
 			Leaderboards.setHost(".proxy/lb");
 			MasterServerClient.setServerIp(".proxy/mbomaster");
 		}
@@ -120,6 +118,10 @@ class Main extends hxd.App {
 		#if hl
 		Console.log("System: " + Sys.systemName());
 		#end
+		#if hlsdl
+		Console.log("GL_VERSION: " + sdl.GL.getParameter(sdl.GL.VERSION) + " | GL_RENDERER: " + sdl.GL.getParameter(sdl.GL.RENDERER)
+			+ " | GL_SHADING_LANGUAGE_VERSION: " + sdl.GL.getParameter(sdl.GL.SHADING_LANGUAGE_VERSION));
+		#end
 
 		// try {
 		RTC.init();
@@ -173,8 +175,81 @@ class Main extends hxd.App {
 		// });
 	}
 
+	#if (hl && pf_diag)
+	// PocketForge regression-harness diagnostics (tsp-0qwbh). Compiled only with
+	// -D pf_diag on hl; absent from the default build. Env driven, not for upstream:
+	//   MBHAXE_AUTOPLAY=<difficulty>:<index>  start that ultra mission N frames after load
+	//   MBHAXE_AUTOPLAY_DELAY=<frames>        (default 300)
+	//   MBHAXE_SHOT_DIR=<dir> MBHAXE_SHOT_FRAMES=f1,f2,...  glReadPixels the back buffer to PNG
+	//   MBHAXE_GLCHECK=1                      log glGetError() per frame (first 50 errors)
+	//   MBHAXE_EXIT_FRAME=<n>                 Sys.exit(0) at frame n
+	var diagFrame = 0;
+	var diagLoadedFrame = -1;
+	var diagGlErrors = 0;
+	var diagLastStamp = 0.0;
+
+	function diagEnv(k:String, d:String) {
+		var v = Sys.getEnv(k);
+		return v == null || v == "" ? d : v;
+	}
+
+	function diagUpdate() {
+		if (loaded && diagLoadedFrame < 0) {
+			diagLoadedFrame = diagFrame;
+			Console.log("[diag] loaded at frame " + diagFrame);
+		}
+		var ap = diagEnv("MBHAXE_AUTOPLAY", "");
+		if (ap != "" && diagLoadedFrame >= 0 && diagFrame == diagLoadedFrame + Std.parseInt(diagEnv("MBHAXE_AUTOPLAY_DELAY", "300"))) {
+			var parts = ap.split(":");
+			var m = MissionList.missionList["ultra"][parts[0]][Std.parseInt(parts[1])];
+			Console.log("[diag] autoplay " + m.title + " (" + m.path + ") at frame " + diagFrame);
+			marbleGame.playMission(m);
+		}
+		if (diagFrame % 120 == 0) {
+			var now = haxe.Timer.stamp();
+			if (diagLastStamp > 0)
+				Console.log("[diag] frame " + diagFrame + " avg frame time " + Std.int((now - diagLastStamp) / 120 * 10000) / 10 + " ms");
+			diagLastStamp = now;
+		}
+		var ex = diagEnv("MBHAXE_EXIT_FRAME", "");
+		if (ex != "" && diagFrame >= Std.parseInt(ex)) {
+			Console.log("[diag] exit at frame " + diagFrame + ", GL errors seen: " + diagGlErrors);
+			Sys.exit(0);
+		}
+	}
+
+	function diagRender() {
+		diagFrame++;
+		if (diagEnv("MBHAXE_GLCHECK", "") == "1") {
+			var err = sdl.GL.getError();
+			while (err != 0) {
+				diagGlErrors++;
+				if (diagGlErrors <= 50)
+					Console.log("[diag] GL error 0x" + StringTools.hex(err) + " at frame " + diagFrame);
+				err = sdl.GL.getError();
+			}
+		}
+		var dir = diagEnv("MBHAXE_SHOT_DIR", "");
+		if (dir != "" && diagEnv("MBHAXE_SHOT_FRAMES", "").split(",").indexOf(Std.string(diagFrame)) >= 0) {
+			var w = hxd.Window.getInstance().width, h = hxd.Window.getInstance().height;
+			var raw = haxe.io.Bytes.alloc(w * h * 4);
+			sdl.GL.readPixels(0, 0, w, h, sdl.GL.RGBA, sdl.GL.UNSIGNED_BYTE, @:privateAccess raw.b);
+			var out = haxe.io.Bytes.alloc(w * h * 4);
+			for (y in 0...h)
+				out.blit((h - 1 - y) * w * 4, raw, y * w * 4, w * 4);
+			var pix = new hxd.Pixels(w, h, out, RGBA);
+			var f = haxe.io.Path.join([dir, "frame" + diagFrame + ".png"]);
+			sys.io.File.saveBytes(f, pix.toPNG());
+			Console.log("[diag] screenshot " + f + " (" + w + "x" + h + ")");
+		}
+	}
+	#end
+
 	override function update(dt:Float) {
 		super.update(dt);
+		#if (hl && pf_diag)
+		diagUpdate();
+		#end
 		ProfilerUI.begin(1);
 		ProfilerUI.measure("updateBegin", 1);
 		if (loaded) {
@@ -206,6 +281,9 @@ class Main extends hxd.App {
 		}
 		super.render(e);
 		ProfilerUI.end(0);
+		#if (hl && pf_diag)
+		diagRender();
+		#end
 		#if hl
 		e.driver.present();
 		#end
@@ -213,10 +291,18 @@ class Main extends hxd.App {
 
 	static function main() {
 		// h3d.mat.PbrMaterialSetup.set();
+		#if gles
+		// OpenGL ES 3.0 (hlsdl built with WITH_SDL_GLES): flags 1|8 = double buffer + ES profile.
+		// No MSAA: costly on mobile GPUs and not every ES driver offers multisampled EGL configs.
+		h3d.Engine.ANTIALIASING = 0;
+		#else
 		h3d.Engine.ANTIALIASING = 4;
+		#end
 		#if hl
 		sdl.Sdl.init();
-		#if !MACOS_BUNDLE
+		#if gles
+		sdl.Sdl.setGLOptions(3, 0, 24, 8, 1 | 8, 0);
+		#elseif !MACOS_BUNDLE
 		sdl.Sdl.setGLOptions(3, 2, 24, 8, 1, 4);
 		#end
 		#end

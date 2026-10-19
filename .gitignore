@@ -23,3 +23,6 @@ macos-dist/data/
 .DS_Store
 **/.DS_Store
 
+
+# PocketForge pinned dependencies (pocketforge/setup-deps.sh)
+/.pf-deps/
