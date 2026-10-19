@@ -1,9 +1,11 @@
 # DT_NEEDED allowlist for the packaged MBHaxe build (gates.sh). One "<arch|*> <soname>" per line.
-# System libraries must be in the device's bookworm image or added to it by the app package;
-# bundled libraries ship in the tarball next to marblegame (rpath $ORIGIN).
+# Libraries outside the build tarball must be in the device's bookworm image or bundled by the app
+# root: app-root.sh puts libopenal, libturbojpeg, libvorbisfile and libuv (and libopenal's
+# libsndio) in lib/ from ../app/bundle.lock and gates the full NEEDED closure against
+# ../app/image-sonames.allow. The hashlink runtime and hdlls ship next to marblegame (rpath $ORIGIN).
 # libGL/GLX/OpenGL are never allowed, whatever this file says (GLES 3.0 via EGL only).
 
-# bookworm system libraries (package)
+# bookworm libraries (image, or bundled in the app root's lib/)
 *        libc.so.6
 *        libm.so.6
 *        libSDL2-2.0.so.0

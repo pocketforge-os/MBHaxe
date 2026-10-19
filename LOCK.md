@@ -114,6 +114,47 @@ inside the installed version directory.
 - gates: `pocketforge/build/gates.sh` (GLIBC <= 2.36, gcc 12 C++ ceilings, `needed.allow`, no libGL,
   `$ORIGIN`-only rpaths).
 
+## App root and game data (tsp-0qwbh.5)
+
+Game data, `pocketforge/app/app.toml` `[fetch]` (never committed, uploaded or bundled; fetched on
+the installing machine):
+
+| item | value |
+|---|---|
+| URL | https://github.com/RandomityGuy/MBHaxe/releases/download/1.3.2-mbu/MBHaxe-Ultra-Linux.tar.gz |
+| SHA256 | `515487e0f9eac03dd660ddedc856bee989c7921464aa96e3cb4f5407267573f2` (equals GitHub's asset digest) |
+| size | 57876762 bytes |
+| extraction | `tar.gz`, `strip_components = 2`, `dest = "data"`: the 752 files of `data/` only |
+
+`1.3.2-mbu` (published 2026-10-18) is the newest `-mbu` release as of 2026-10-19 (then 1.3.1-mbu,
+1.3.0-mbu). Its `data/` is byte-identical to this repository's `data/` (`diff -r`, including
+`data/tmp`), and `pf-fetch.py` installs it with upstream's mtimes, so heaps' converter cache
+(`data/tmp/cache.dat`) stays valid and nothing is written beside the read-only executable.
+
+Bundled libraries, `pocketforge/app/bundle.lock`: Debian snapshot 20260601T000000Z, the same
+`.debs` as the build sysroot (`app-root.sh` refuses any other when run from `build.sh --app-root`).
+Missing from the image package closure (image `0e835bb0` rootfs-packages.txt,
+rootfs-packages-mainline.txt, rootfs-packages-a133-open-7x-gpu.txt plus the gamescope runtime,
+resolved against the snapshot): libopenal1, libturbojpeg0, libvorbisfile3, libuv1 and libopenal1's
+dependency libsndio7.0. Their own dependencies (libasound2, libbsd0, libmd0, libvorbis0a, libogg0,
+libc6) are in the image.
+
+| package | version | arm64 .deb SHA256 | arm64 file SHA256 | amd64 .deb SHA256 | amd64 file SHA256 |
+|---|---|---|---|---|---|
+| libopenal1 (`lib/libopenal.so.1`) | 1:1.19.1-2 | `848f7cb93823c780ab58c0da67535316ef797666934d06ed6d64e902d4e2df11` | `9bcff6eeedfd40543a31d0d39399b4c1390b51e9ee2b1c9db1399123222eb98b` | `b027d29d37786e4dacb21a7268e911566efb09f5a20facc66c57dd22a7c31e83` | `4c0acaa919cbdd14830d1ce30dab448cfc33aa6262dd49f7b605aa6bbd07c889` |
+| libsndio7.0 (`lib/libsndio.so.7.0`) | 1.9.0-0.3+b2 | `e7c787895eacf8363a4dea6a0cb3237a78857691d8d53f60a1a3ffeea3819808` | `1dc7015db86b9bf122384c7e9799d6980c02ff7ed8173bd9c5a62680bdd06e47` | `c4cc979126cc558549db25d42e2849a9d5dcdf7928e0ece69c38c374021a078b` | `c2a65f3e29b49ab7d6a730bc16f9e6cb2da89421e4c8b66c9171637453f452f8` |
+| libturbojpeg0 (`lib/libturbojpeg.so.0`) | 1:2.1.5-2 | `85a0914484efe5bfa51c79bc45ccb5133373f65a94e7bd867c89a6a45188d148` | `a953fad5cc022e6d728084973371401cdb6e74cce66d8c334d5caf8842ba3468` | `466d8e2a6b501c43d9064e19972465e7703611a9c344f0244cb3bedbc2a328bc` | `4292207ec19b9543d29e13a71263ecd6ad89a28f880e5d201c76cfb168e6d056` |
+| libvorbisfile3 (`lib/libvorbisfile.so.3`) | 1.3.7-1 | `f8f418e15f99905d4a2d532617511a11d700e814f8ead1a883deea2f7241970c` | `719c0288d8fc1b553d084be0c55ff72917f8159de438686d3701c97128128358` | `68f84034ae1c9fa0ab6a45f5b6c406a50faae4421f0d78874260aefa2df68efc` | `893839d05f0d02ce9f4beb8a24a5dc8d7feda2ab85cee1eaeaf390204daa9703` |
+| libuv1 (`lib/libuv.so.1`) | 1.44.2-1+deb12u1 | `96022663d045c9599cf664b98db45e254b05b0661860ad89f1501b7dbf0da258` | `74e5a3690dcabe793ccde78521843cb1de85069b859d46d15dca8301f3ca6e3f` | `204f0e13354b44e6d19317887a53dab6f26696e8d95838db970b81f2a393f7fd` | `c85c14dbe2fc8d38cedcacf3a7f9b4f71cd9fc40b2ea5f29eb6b8e929cb32bfb` |
+
+Licences shipped in `licenses/`: MBHaxe (MIT), hashlink (MIT), heaps (MIT), Haxe standard library,
+mbedtls (static in ssl.hdll), minimp3, colyseus-websocket, the format haxelib (BSD-2; its zip has no
+licence file, so `pocketforge/build/licenses/haxe-format.txt` is upstream's LICENSE at
+HaxeFoundation/format `914c2fa2b6a0ff7b0786aec5ebabbb7a622a0b9d`) and hxDatachannel (MIT,
+`stubs/datachannel/LICENSE` from RandomityGuy/hxDatachannel
+`76a6ee4638881355a95155fbef3583039941cde9`), plus each bundled package's Debian `copyright` in
+`licenses/debian/`.
+
 ## Reference artifacts (pipeline, builder container, tsp-0qwbh.2)
 
 `pocketforge/build/container.sh` from the pins above. Builds are bit-reproducible: two runs in fresh
@@ -121,7 +162,8 @@ work directories gave identical `marblegame`, tarball and manifest, and `-ffile-
 work paths out of libhl and the hdlls. These `marblegame` hashes change only with the sources or
 pins; tarball and manifest hashes also cover the MBHaxe commit and are recorded per build.
 Values below: tsp-0qwbh.4 handheld series (built at MBHaxe `1240d2d4`, heaps `8510842b`; one run per
-variant, the reproducibility check is tsp-0qwbh.2's).
+variant, the reproducibility check is tsp-0qwbh.2's). The tsp-0qwbh.5 builds at `ccda565b` (aarch64
+product, x86_64 `pf_diag`) gave the same `marblegame` hashes.
 
 | artifact | SHA256 |
 |---|---|
@@ -132,6 +174,24 @@ variant, the reproducibility check is tsp-0qwbh.2's).
 
 Gates on all three: highest GLIBC symbol version GLIBC_2.34; NEEDED within `pocketforge/build/needed.allow`;
 no libGL; rpath `$ORIGIN` only.
+
+App roots from those builds (`container.sh ... --app-root`, MBHaxe `ccda565b`, one run each). The
+host re-assembly of the aarch64 one with `app-root.sh` gave the same tarball. The tarball and
+manifest hashes also cover the MBHaxe commit and change with it.
+
+| artifact | SHA256 |
+|---|---|
+| aarch64 build tarball `mbhaxe-pf-1.3.2-pf.20261019.ccda565b0a-aarch64.tar.zst` | `cae7cd34acb1b63e215c2634dc6917bb6c7b72d0273112a668ef1b9f98c72052` |
+| aarch64 app root `org.pocketforge.mbhaxe-1.3.2-pf.20261019.ccda565b0a-aarch64.app.tar.zst` | `9f3a72122b3bf9a3ef20f9378364a4a9ac2f902fd2d7503d91ab1ba9dbf49935` |
+| aarch64 `APP-MANIFEST.json` | `74f6e4ae999d74948990be5079da8d8f7235f72d6e8d351fff66c02c6600fc32` |
+| x86_64 diag build tarball | `c6b657ba4c6643e03b6499d593afae592d954477681563135d8de676f5be5ca6` |
+| x86_64 diag app root `org.pocketforge.mbhaxe-1.3.2-pf.20261019.ccda565b0a-x86_64-diag.app.tar.zst` | `c99c3cab78002570a5be1a8b1abc78044611da7db78d5f361220300a324d3dfd` |
+
+App-root gates (both arches, top level and `lib/`): GLIBC_2.34 highest; NEEDED closed over the
+app root plus `pocketforge/app/image-sonames.allow`; no libGL; `$ORIGIN`-only rpaths.
+Laptop measurements (`tests/launch-smoke.sh`, x86_64 diag under Zink/lavapipe, orientation only, not
+a device number): peak RSS 518700 KiB (lavapipe renders on the CPU); aarch64 app root 13.4 MiB plus
+`data/` 70.8 MiB.
 
 ## Reference artifacts (tsp-0qwbh.1 reproduction, host gcc 13, 2026-10-19)
 

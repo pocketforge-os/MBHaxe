@@ -67,6 +67,40 @@ there until this repository is admitted to the pf-public runner class; activatin
 never stored on GitHub: `pocketforge/build/publish-mm.sh` publishes a clean build's tarball and
 manifest to the PocketForge content-addressed artifact store from a trusted host.
 
+## PocketForge app (`org.pocketforge.mbhaxe`)
+
+`pocketforge/app/` packages the build as a PocketForge app:
+
+- `app.toml`: the schema-2 descriptor. GLES 3.0, `buttons` + `stick` (the runtime vocabulary has no
+  `gamepad` token), audio + input, no network, `memory_mib` a placeholder until the device window
+  measures it. `[fetch]` pins the upstream `1.3.2-mbu` Linux release asset by URL, SHA256 and size
+  and installs only its `data/`.
+- `launch`: the `[launch].exec` wrapper. It puts the bundled `lib/` on `LD_LIBRARY_PATH`, sets
+  `ALSOFT_CONF`, `SDL_VIDEODRIVER=wayland` and `TMPDIR`, and runs the game from a writable directory
+  under `XDG_STATE_HOME` (the app directory is read-only under `pf-app@`).
+- `bundle.lock`: libopenal1, libsndio7.0, libturbojpeg0, libvorbisfile3 and libuv1, the same
+  snapshot `.debs` the sysroot links against. The image does not install them, and bundling them
+  leaves the image unchanged. `image-sonames.allow` lists what the image provides.
+- `pf-fetch.py`: the reference `[fetch]` implementation (pinned size and SHA256, GNU
+  `strip_components`, unsafe members refused, atomic install, nothing changed on refusal);
+  `tests/test-fetch.sh` is its red/green test.
+- `stage-app.sh`, `tests/launch-smoke.sh` and `DEV-INSTALL.md`: laptop staging, the launch smoke
+  under a private weston, and the device dev install and removal.
+
+```sh
+pocketforge/build/container.sh --work /path/to/work --arch aarch64 --app-root
+# or, from an existing build: pocketforge/build/app-root.sh --build WORK/out/aarch64-product.env
+```
+
+`app-root.sh` verifies the build artifact (SHA256 and the inner `SHA256SUMS`) and downloads the
+pinned `.debs` by SHA256 and size. It copies each library (dereferenced) into `lib/` and its Debian
+`copyright` into `licenses/debian/`, and adds `app.toml`, `launch` and `alsoft.conf`. It then runs
+`gates.sh` over the top level and `lib/` with a NEEDED closure allowlist (the image's sonames plus
+every shipped ELF). The output is `org.pocketforge.mbhaxe-<version>-<arch>[-diag].app.tar.zst`
+(top-level dir `org.pocketforge.mbhaxe/`, the device's `/opt/pocketforge/apps/org.pocketforge.mbhaxe`)
+with `APP-MANIFEST.json`: bundled package, version, `.deb` SHA256 and file SHA256, plus every file's
+SHA256, size and mode. The tarball is deterministic like the build tarball.
+
 ## Build modes
 
 `compile-linux-gles.hxml` sets:
@@ -152,8 +186,9 @@ build of this tree sends telemetry.
 ## Assets
 
 PocketForge redistributes no game assets. The `data/` directory stays as upstream ships it in this
-repository, and PocketForge adds no assets. PocketForge images and artifacts do not bundle game
-data. The user-installed app downloads the data from a pinned upstream release.
+repository, and PocketForge adds no assets. PocketForge images and artifacts, including the app
+root, do not bundle game data. The app's `[fetch]` downloads it from the pinned upstream release
+(`MBHaxe-Ultra-Linux.tar.gz` of `1.3.2-mbu`, see `LOCK.md`) on the machine that installs the app.
 
 ## Contributing
 

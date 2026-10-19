@@ -1,0 +1,31 @@
+# Sonames the PocketForge device image provides to the MBHaxe app root (tsp-0qwbh.5).
+# Same format as ../build/needed.allow: one "<arch|*> <soname>" per line. app-root.sh adds every
+# ELF the app root ships (marblegame, libhl.so.1, the hdlls, lib/*) and runs the gates.sh
+# needed-allowlist gate over the top level and lib/ with the result: a NEEDED closure check.
+#
+# Every package named below is in the image's package closure (image rootfs-packages.txt,
+# rootfs-packages-mainline.txt and rootfs-packages-a133-open-7x-gpu.txt plus the gamescope
+# session runtime, resolved against the same bookworm snapshot; LOCK.md records the image
+# commit). A soname belongs here only if its package is in that closure; anything else is
+# bundled through bundle.lock.
+
+# libc6
+*        libc.so.6
+*        libm.so.6
+*        libpthread.so.0
+*        libdl.so.2
+aarch64  ld-linux-aarch64.so.1
+x86_64   ld-linux-x86-64.so.2
+# libsdl2-2.0-0
+*        libSDL2-2.0.so.0
+# libgles2 (GLVND; the vendor or Mesa GLES behind it)
+*        libGLESv2.so.2
+# zlib1g, libpng16-16
+*        libz.so.1
+*        libpng16.so.16
+# libvorbis0a, libogg0 (libvorbisfile3 depends on them)
+*        libvorbis.so.0
+*        libogg.so.0
+# libasound2, libbsd0 (libsndio7.0 depends on them)
+*        libasound.so.2
+*        libbsd.so.0

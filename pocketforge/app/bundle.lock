@@ -1,0 +1,28 @@
+# Debian bookworm libraries bundled in the MBHaxe app root (lib/), tsp-0qwbh.5.
+#
+# marblegame and its hdlls need these sonames, and the PocketForge image does not install them
+# (image rootfs-packages*.txt closure, recorded in LOCK.md). Bundling them keeps the image
+# unchanged. They are the exact .debs the build sysroot links against: the same snapshot
+# (pins.lock PF_DEBIAN_SNAPSHOT) and sha256, which app-root.sh cross-checks against the
+# sysroot's debs.sha256 when it runs inside build.sh. libsndio7.0 is here because libopenal1
+# needs libsndio.so.7.0; its own dependencies (libasound2, libbsd0, libmd0) are in the image.
+#
+# app-root.sh downloads each .deb from
+#   http://snapshot.debian.org/archive/debian/<PF_DEBIAN_SNAPSHOT>/<pool path>
+# (plain http, like sysroot.sh: integrity is the sha256 and size pinned here), extracts
+# usr/lib/<triple>/<needed-name> with symlinks dereferenced to lib/<needed-name>, and copies
+# usr/share/doc/<package>/copyright to licenses/debian/<package>.copyright.
+#
+# Columns: arch package version sha256 size needed-name pool-path
+# needed-name is the file name the dependants' DT_NEEDED asks for and the name it gets in lib/
+# (libsndio.so.7.0 is Debian's compatibility name; the library's SONAME is libsndio.so.7).
+aarch64 libopenal1     1:1.19.1-2      848f7cb93823c780ab58c0da67535316ef797666934d06ed6d64e902d4e2df11 485416 libopenal.so.1     pool/main/o/openal-soft/libopenal1_1.19.1-2_arm64.deb
+aarch64 libsndio7.0    1.9.0-0.3+b2    e7c787895eacf8363a4dea6a0cb3237a78857691d8d53f60a1a3ffeea3819808 25716  libsndio.so.7.0    pool/main/s/sndio/libsndio7.0_1.9.0-0.3+b2_arm64.deb
+aarch64 libturbojpeg0  1:2.1.5-2       85a0914484efe5bfa51c79bc45ccb5133373f65a94e7bd867c89a6a45188d148 209868 libturbojpeg.so.0  pool/main/libj/libjpeg-turbo/libturbojpeg0_2.1.5-2_arm64.deb
+aarch64 libvorbisfile3 1.3.7-1         f8f418e15f99905d4a2d532617511a11d700e814f8ead1a883deea2f7241970c 25376  libvorbisfile.so.3 pool/main/libv/libvorbis/libvorbisfile3_1.3.7-1_arm64.deb
+aarch64 libuv1         1.44.2-1+deb12u1 96022663d045c9599cf664b98db45e254b05b0661860ad89f1501b7dbf0da258 129764 libuv.so.1        pool/main/libu/libuv1/libuv1_1.44.2-1+deb12u1_arm64.deb
+x86_64  libopenal1     1:1.19.1-2      b027d29d37786e4dacb21a7268e911566efb09f5a20facc66c57dd22a7c31e83 500936 libopenal.so.1     pool/main/o/openal-soft/libopenal1_1.19.1-2_amd64.deb
+x86_64  libsndio7.0    1.9.0-0.3+b2    c4cc979126cc558549db25d42e2849a9d5dcdf7928e0ece69c38c374021a078b 27312  libsndio.so.7.0    pool/main/s/sndio/libsndio7.0_1.9.0-0.3+b2_amd64.deb
+x86_64  libturbojpeg0  1:2.1.5-2       466d8e2a6b501c43d9064e19972465e7703611a9c344f0244cb3bedbc2a328bc 209600 libturbojpeg.so.0  pool/main/libj/libjpeg-turbo/libturbojpeg0_2.1.5-2_amd64.deb
+x86_64  libvorbisfile3 1.3.7-1         68f84034ae1c9fa0ab6a45f5b6c406a50faae4421f0d78874260aefa2df68efc 26084  libvorbisfile.so.3 pool/main/libv/libvorbis/libvorbisfile3_1.3.7-1_amd64.deb
+x86_64  libuv1         1.44.2-1+deb12u1 204f0e13354b44e6d19317887a53dab6f26696e8d95838db970b81f2a393f7fd 135616 libuv.so.1        pool/main/libu/libuv1/libuv1_1.44.2-1+deb12u1_amd64.deb
