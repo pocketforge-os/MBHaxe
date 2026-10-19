@@ -318,7 +318,42 @@ class Main extends hxd.App {
 	}
 	#end
 
+	#if (hl && handheld)
+	// The game data must be a real directory next to the executable: heaps' file converter
+	// computes resource paths by stripping the base directory prefix from real paths, which
+	// breaks on a symlinked data/. data/tmp is the converter's cache (ResourceLoader sets it);
+	// it ships pre-populated, and new conversions are written there.
+	static function checkDataDir() {
+		function fail(msg:String) {
+			Sys.stderr().writeString("MBHaxe: " + msg + "\n");
+			Sys.exit(2);
+		}
+		var exeDir = haxe.io.Path.directory(Sys.programPath());
+		var data = haxe.io.Path.join([exeDir, "data"]);
+		if (!sys.FileSystem.exists(data) || !sys.FileSystem.isDirectory(data))
+			fail('game data not found: ${data} must be a directory holding the Marble Blast Ultra data.');
+		var realData = sys.FileSystem.fullPath(data);
+		var expected = haxe.io.Path.join([sys.FileSystem.fullPath(exeDir), "data"]);
+		if (realData != expected)
+			fail('${data} is a symlink to ${realData}; it must be a real directory next to the executable.');
+		var tmp = haxe.io.Path.join([data, "tmp"]);
+		try {
+			if (!sys.FileSystem.exists(tmp))
+				sys.FileSystem.createDirectory(tmp);
+			var probe = haxe.io.Path.join([tmp, ".write-test"]);
+			sys.io.File.saveContent(probe, "");
+			sys.FileSystem.deleteFile(probe);
+		} catch (e) {
+			Sys.stderr().writeString('MBHaxe: warning: cache directory ${tmp} is not writable (' + Std.string(e)
+				+ '); resources that are not already converted there will fail to load.\n');
+		}
+	}
+	#end
+
 	static function main() {
+		#if (hl && handheld)
+		checkDataDir();
+		#end
 		// h3d.mat.PbrMaterialSetup.set();
 		#if gles
 		// OpenGL ES 3.0 (hlsdl built with WITH_SDL_GLES): flags 1|8 = double buffer + ES profile.
