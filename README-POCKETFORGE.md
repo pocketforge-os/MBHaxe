@@ -59,9 +59,11 @@ Steps, all from pins in `LOCK.md`, `pocketforge/deps.lock` and `pocketforge/buil
    the lock-file digests, the builder package-set digest and the sysroot .deb list digest.
    `<version>` is `<upstream version>-pf.<commit date>.<commit sha10>`.
 
-Two builds of the same commit are byte-identical (tarball included). CI
-(`.github/workflows/pocketforge-build.yml`, logic in `pocketforge/build/ci.sh`) builds aarch64 twice
-on separate runners and compares, and builds the x86_64 `pf_diag` harness binary. Artifacts are
+Two builds of the same commit are byte-identical (tarball included). The CI workflow
+(`pocketforge/build/ci/pocketforge-build.yml`, logic in `pocketforge/build/ci.sh`) builds aarch64
+twice on separate runners and compares, and builds the x86_64 `pf_diag` harness binary. It is staged
+there until this repository is admitted to the pf-public runner class; activating it is a move to
+`.github/workflows/`. Artifacts are
 never stored on GitHub: `pocketforge/build/publish-mm.sh` publishes a clean build's tarball and
 manifest to the PocketForge content-addressed artifact store from a trusted host.
 

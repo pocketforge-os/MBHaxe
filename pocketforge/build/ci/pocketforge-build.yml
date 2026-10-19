@@ -1,3 +1,8 @@
+# STAGED, NOT ACTIVE: move to .github/workflows/pocketforge-build.yml once pocketforge-os/MBHaxe is
+# admitted to the pf-public runner class (org runner group pf-public + enrolled_repositories in
+# pocketforge-automation config/runner-pool.json). Until then the pre-push runner-admission guard
+# refuses it (reason=repo_not_enrolled), correctly: its jobs could never start.
+#
 # PocketForge MBHaxe build: two independent aarch64 builds from the same commit must produce
 # byte-identical marblegame and tarball (determinism), plus the x86_64 -D pf_diag build used by
 # the regression harness. All logic lives in pocketforge/build/ci.sh so the same steps run under
