@@ -51,6 +51,9 @@ typedef OptionsSettings = {
 	var huntRandom:Bool;
 	var fastLoad:Bool;
 	var currentView:Int;
+	#if handheld
+	var fpsCap:Int;
+	#end
 }
 
 typedef ControlsSettings = {
@@ -151,6 +154,9 @@ class Settings {
 		huntRandom: false,
 		fastLoad: false,
 		currentView: 0
+		#if handheld
+		, fpsCap: 0 // 0 = no cap
+		#end
 	};
 
 	public static var controlsSettings:ControlsSettings = {

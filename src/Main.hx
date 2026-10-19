@@ -294,7 +294,29 @@ class Main extends hxd.App {
 		#if hl
 		e.driver.present();
 		#end
+		#if (hl && handheld)
+		capFrameRate();
+		#end
 	}
+
+	#if (hl && handheld)
+	var capFrameStart = 0.0;
+
+	// Optional frame rate cap (Video Options, Settings.optionsSettings.fpsCap; 0 = off).
+	// Sleeps after present so the CPU and GPU idle instead of rendering frames nobody needs.
+	function capFrameRate() {
+		var cap = Settings.optionsSettings.fpsCap;
+		var now = haxe.Timer.stamp();
+		if (cap > 0) {
+			var wait = capFrameStart + 1.0 / cap - now;
+			if (wait > 0.001) {
+				Sys.sleep(wait);
+				now = haxe.Timer.stamp();
+			}
+		}
+		capFrameStart = now;
+	}
+	#end
 
 	static function main() {
 		// h3d.mat.PbrMaterialSetup.set();
