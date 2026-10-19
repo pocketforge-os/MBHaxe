@@ -128,6 +128,13 @@ class Main extends hxd.App {
 		Http.init();
 		haxe.MainLoop.add(() -> Http.loop());
 		Settings.init();
+		#if (hl && handheld)
+		// Window close / SDL_QUIT (also raised by SDL on SIGTERM and SIGINT) quits cleanly with status 0.
+		hxd.Window.getInstance().onClose = () -> {
+			MarbleGame.quitGame();
+			return true;
+		};
+		#end
 		Gamepad.init();
 		MPCustoms.loadMissionList();
 		ResourceLoader.init(s2d, () -> {

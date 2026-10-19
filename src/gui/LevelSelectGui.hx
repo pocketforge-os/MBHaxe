@@ -161,6 +161,7 @@ class LevelSelectGui extends GuiImage {
 		bottomBar.addChild(recordButton);
 
 		// if (currentDifficultyStatic != "multiplayer") {
+		#if !offline
 		var lbButton = new GuiXboxButton("Leaderboard", 220);
 		lbButton.position = new Vector(750, 0);
 		lbButton.vertSizing = Bottom;
@@ -168,6 +169,7 @@ class LevelSelectGui extends GuiImage {
 		lbButton.horizSizing = Right;
 		lbButton.pressedAction = (e) -> MarbleGame.canvas.setContent(new LeaderboardsGui(currentSelectionStatic, currentDifficultyStatic, true));
 		bottomBar.addChild(lbButton);
+		#end
 		// }
 
 		var nextButton = new GuiXboxButton("Play", 160);

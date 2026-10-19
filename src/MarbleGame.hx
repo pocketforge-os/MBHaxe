@@ -322,6 +322,30 @@ class MarbleGame {
 		}
 	}
 
+	#if (hl && handheld)
+	/**
+		Quit to the shell with exit status 0: save settings, close the OpenAL device, exit.
+		Used by the main menu Quit entry and the window close request (SDL_QUIT, which SDL
+		also raises on SIGTERM/SIGINT), so the session launcher sees a clean exit.
+	**/
+	public static function quitGame() {
+		Console.log("Quitting");
+		try {
+			Settings.save();
+		} catch (e) {
+			Console.error("Could not save settings on quit: " + Std.string(e));
+		}
+		try {
+			var manager = @:privateAccess AudioManager.manager;
+			if (manager != null)
+				manager.dispose();
+		} catch (e) {
+			Console.error("Could not close the audio device on quit: " + Std.string(e));
+		}
+		Sys.exit(0);
+	}
+	#end
+
 	public function getWorld() {
 		// So that we don't actually store this somewhere in any closure stack
 		return world;
