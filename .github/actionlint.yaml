@@ -1,0 +1,4 @@
+# actionlint: the PocketForge self-hosted runner class this repository uses (pf-public).
+self-hosted-runner:
+  labels:
+    - pf-public-ci

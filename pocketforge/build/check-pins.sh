@@ -11,9 +11,9 @@ fail=0
 check() { if eval "$2"; then echo "check=$1 status=PASS"; else echo "check=$1 status=FAIL"; fail=1; fi; }
 
 check containerfile-from "grep -qxF 'FROM $PF_BASE_IMAGE' '$PF_BUILD_DIR/Containerfile'"
-# Every container image in the CI workflow (active, else staged) is the pinned base.
+# Every container image in the CI workflow is the pinned base.
 WF=$REPO/.github/workflows/pocketforge-build.yml
-[ -f "$WF" ] || WF=$PF_BUILD_DIR/ci/pocketforge-build.yml
+check workflow-present "[ -f '$WF' ]"
 # shellcheck disable=SC2034 # used by eval in check()
 wf_images=$(sed -n 's/^[[:space:]]*image:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$WF" | sort -u)
 # shellcheck disable=SC2016 # expanded by eval in check()

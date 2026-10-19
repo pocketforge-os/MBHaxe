@@ -1,13 +1,27 @@
-# STAGED, NOT ACTIVE: move to .github/workflows/pocketforge-build.yml once pocketforge-os/MBHaxe is
-# admitted to the pf-public runner class (org runner group pf-public + enrolled_repositories in
-# pocketforge-automation config/runner-pool.json). Until then the pre-push runner-admission guard
-# refuses it (reason=repo_not_enrolled), correctly: its jobs could never start.
+# PocketForge MBHaxe CI (tsp-0qwbh.2 build pipeline + tsp-0qwbh.3 regression harness, activated by
+# tsp-0qwbh.8). Runs on every push to pocketforge and on pull requests into it.
 #
-# PocketForge MBHaxe build: two independent aarch64 builds from the same commit must produce
-# byte-identical marblegame and tarball (determinism), plus the x86_64 -D pf_diag build used by
-# the regression harness. All logic lives in pocketforge/build/ci.sh so the same steps run under
-# Forgejo Actions. Runners: the credential-free, LAN-isolated pf-public class (this repo is public).
-# No artifact upload: CI only proves the build; publish-mm.sh publishes from a trusted host.
+# - aarch64-a / aarch64-b: two independent aarch64 product builds of the same commit; the
+#   determinism job asserts byte-identical marblegame, tarball and generated C tree and prints
+#   both sha256s of each.
+# - harness: the x86_64 -D pf_diag build, then tests/pf-harness/ci.sh: an aarch64 build for the
+#   qemu-aarch64 smoke, the game data fetched at job time by pocketforge/app/pf-fetch.py exactly as
+#   app.toml [fetch] pins it (upstream release URL + SHA256 + size; never committed, cached or
+#   uploaded), and tests/pf-harness/run.sh (Zink over lavapipe, OpenGL ES 3.0, es3strict,
+#   screenshot probes, no-network strace, qemu smoke).
+#   It runs in the same pinned Debian bookworm job container as the builds (Mesa 22.3.6,
+#   SDL 2.26.5). One deviation from the tsp-0qwbh.3 Ubuntu setup: the headless compositor is cage
+#   0.1.4 (wlroots 0.15), not weston. Bookworm's weston 10 headless backend advertises no wl_seat,
+#   and bookworm's SDL 2.26.5 dereferences the missing seat in Wayland_InitMouse (SIGSEGV inside
+#   SDL_Init). cage always advertises a seat but refuses root, so the harness runs as an
+#   unprivileged user inside the container.
+#
+# All logic lives in pocketforge/build/ci.sh and tests/pf-harness/ci.sh, so the same steps run
+# under Forgejo Actions. Runners: the credential-free, LAN-isolated pf-public class (this repo is
+# public); every job needs public egress only (docker.io, snapshot.debian.org, github.com).
+# No artifact upload of any kind: CI proves the build and prints hashes and harness results to the
+# job log; screenshots are game-derived imagery and stay in the throwaway job container.
+# publish-mm.sh publishes release artifacts from a trusted host.
 name: pocketforge-build
 
 on:
@@ -22,11 +36,11 @@ permissions:
 
 concurrency:
   group: pocketforge-build-${{ github.ref }}
-  cancel-in-progress: true
+  # Every push to pocketforge is tested; only superseded pull-request runs are cancelled.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   aarch64-a:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, pf-public-ci]
     timeout-minutes: 60
     container:
@@ -41,13 +55,16 @@ jobs:
       # The bare base image has no git, so the first checkout is a plain file download; it is
       # enough to run toolchain.sh, which installs git, and the second checkout is a real clone.
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
       - run: pocketforge/build/toolchain.sh
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
       - id: build
         run: pocketforge/build/ci.sh aarch64 product "$RUNNER_TEMP/pf-work"
 
   aarch64-b:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, pf-public-ci]
     timeout-minutes: 60
     container:
@@ -59,27 +76,35 @@ jobs:
       artifact_sha256: ${{ steps.build.outputs.artifact_sha256 }}
       generated_c_tree_sha256: ${{ steps.build.outputs.generated_c_tree_sha256 }}
     steps:
-      # The bare base image has no git, so the first checkout is a plain file download; it is
-      # enough to run toolchain.sh, which installs git, and the second checkout is a real clone.
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
       - run: pocketforge/build/toolchain.sh
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
       - id: build
         run: pocketforge/build/ci.sh aarch64 product "$RUNNER_TEMP/pf-work"
 
-  x86_64-diag:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+  harness:
     runs-on: [self-hosted, pf-public-ci]
-    timeout-minutes: 60
+    timeout-minutes: 120
     container:
       image: docker.io/library/debian:bookworm-20260518@sha256:ed4fcc40bb1162b6d2d32e7bec15044d13963779abbe63f67f1cd62b06220519
       env:
         PF_IN_BUILDER_CONTAINER: "1"
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
       - run: pocketforge/build/toolchain.sh
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - run: pocketforge/build/ci.sh x86_64 diag "$RUNNER_TEMP/pf-work"
+        with:
+          persist-credentials: false
+      - name: x86_64 diag build (harness binary)
+        run: pocketforge/build/ci.sh x86_64 diag "$RUNNER_TEMP/pf-work"
+      - name: regression harness
+        run: tests/pf-harness/ci.sh "$RUNNER_TEMP/pf-work"
 
   determinism:
     needs: [aarch64-a, aarch64-b]
@@ -98,6 +123,8 @@ jobs:
           rc=0
           for k in GAME TAR GEN; do
             a=$(printenv "A_$k"); b=$(printenv "B_$k")
+            echo "aarch64-a $k sha256=$a"
+            echo "aarch64-b $k sha256=$b"
             if [ -n "$a" ] && [ "$a" = "$b" ]; then echo "determinism=$k status=PASS sha256=$a"
             else echo "determinism=$k status=FAIL a=$a b=$b"; rc=1; fi
           done
