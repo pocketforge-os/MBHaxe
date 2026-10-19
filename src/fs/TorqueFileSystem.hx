@@ -39,6 +39,8 @@ class TorqueFileSystem extends LocalFileSystem {
 
 		if (exePath != null)
 			exePath.pop();
+		if (haxe.io.Path.isAbsolute(dir))
+			exePath = null; // an absolute root (MBHAXE_DATA_DIR's parent) is not exe-relative
 		var froot = exePath == null ? baseDir : sys.FileSystem.fullPath(exePath.join("/") + "/" + baseDir);
 		if (froot == null || !sys.FileSystem.exists(froot) || !sys.FileSystem.isDirectory(froot)) {
 			froot = sys.FileSystem.fullPath(baseDir);

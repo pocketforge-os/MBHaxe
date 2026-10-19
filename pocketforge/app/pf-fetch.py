@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
-"""Install an app's [fetch] files exactly as app.toml pins them (tsp-0qwbh.5).
+"""Install an app's [fetch] files exactly as app.toml pins them (tsp-0qwbh.5, tsp-0qwbh.9).
 
-usage: python3 -I pf-fetch.py --app-toml APP.TOML --root APPDIR [--from-file ARCHIVE]
-                              [--cache DIR] [--replace]
+usage: python3 -I pf-fetch.py --app-toml APP.TOML [--root DIR | --var-root DIR | --data-home DIR]
+                              [--from-file ARCHIVE] [--cache DIR] [--replace]
+
+Where `dest` goes (the destination root):
+  --root DIR       DIR itself, whatever [fetch].destination says (the dev layout: the app
+                   directory, so data/ lands beside the executable);
+  otherwise [fetch].destination decides (pocketforge-plan.md section 9.4):
+    "var"          /var/lib/pocketforge/apps/<app.id>/ (app-private, writable by the app's unit),
+                   or --var-root DIR standing in for it (a staging tree);
+    "home"         $XDG_DATA_HOME (default ~/.local/share), or --data-home DIR;
+    absent         refused: pass --root.
+  The destination root must already exist.
 
 For every [[fetch.files]] entry:
   1. obtain the archive: --from-file (a local copy), else download the pinned https URL into
@@ -13,7 +23,7 @@ For every [[fetch.files]] entry:
      skipped, the first N components of the others are removed), and refuse unsafe members:
      absolute paths, "..", links, devices and FIFOs; file and directory modes are reduced to
      0755/0644, modification times are preserved (the game's converter cache compares them);
-  4. install atomically: rename the temporary directory to ROOT/<dest>. An existing
+  4. install atomically: rename the temporary directory to <destination root>/<dest>. An existing
      destination is refused unless --replace, which swaps it out first and deletes the old copy
      only after the rename succeeded.
 
@@ -38,6 +48,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+DESTINATIONS = ("var", "home")
 FILE_KEYS = {"url", "sha256", "size", "format", "strip_components", "dest"}
 REQUIRED_KEYS = {"url", "sha256", "size", "format", "dest"}
 FORMATS = {"tar.gz": "r:gz"}
@@ -49,11 +60,18 @@ class Refused(Exception):
 
 
 def load_fetch(path):
+    """Return (app id, destination or None, [file entries])."""
     with open(path, "rb") as f:
         manifest = tomllib.load(f)
+    app_id = manifest.get("app", {}).get("id")
+    if not isinstance(app_id, str) or not app_id or "/" in app_id or app_id in (".", ".."):
+        raise Refused("app.toml has no valid [app].id")
     fetch = manifest.get("fetch")
     if not isinstance(fetch, dict) or not fetch.get("enabled", False):
         raise Refused("app.toml has no enabled [fetch]")
+    destination = fetch.get("destination")
+    if destination is not None and destination not in DESTINATIONS:
+        raise Refused(f"[fetch].destination must be one of {DESTINATIONS}: {destination!r}")
     files = fetch.get("files")
     if not isinstance(files, list) or not files:
         raise Refused("[fetch] has no [[fetch.files]]")
@@ -85,7 +103,25 @@ def load_fetch(path):
         if not parts or dest.startswith("/") or any(p in ("", ".", "..") for p in parts):
             raise Refused(f"fetch.files[{i}]: dest must be a relative path without . or ..: {dest!r}")
         out.append(dict(url=url, sha256=sha, size=size, format=entry["format"], strip=strip, dest=dest))
-    return out
+    return app_id, destination, out
+
+
+def destination_root(args, app_id, destination):
+    if args.root:
+        return args.root
+    if destination == "var":
+        return args.var_root or os.path.join("/var/lib/pocketforge/apps", app_id)
+    if destination == "home":
+        if args.data_home:
+            return args.data_home
+        xdg = os.environ.get("XDG_DATA_HOME")
+        if xdg:
+            return xdg
+        home = os.environ.get("HOME")
+        if not home:
+            raise Refused("destination home: neither XDG_DATA_HOME nor HOME is set (use --data-home)")
+        return os.path.join(home, ".local", "share")
+    raise Refused("[fetch] has no destination (use --root)")
 
 
 def hash_file(path, size_cap):
@@ -215,13 +251,16 @@ def install(entry, root, archive, replace):
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--app-toml", required=True)
-    ap.add_argument("--root", required=True, help="the app directory; dest is relative to it")
+    ap.add_argument("--root", help="install dest relative to this directory, ignoring [fetch].destination")
+    ap.add_argument("--var-root", help='stands in for /var/lib/pocketforge/apps/<id> (destination "var")')
+    ap.add_argument("--data-home", help='stands in for $XDG_DATA_HOME (destination "home")')
     ap.add_argument("--from-file", help="use this local copy of the archive (still verified)")
     ap.add_argument("--cache", help="download directory (default: a temporary directory)")
     ap.add_argument("--replace", action="store_true", help="replace an existing destination")
     args = ap.parse_args(argv)
     try:
-        entries = load_fetch(args.app_toml)
+        app_id, destination, entries = load_fetch(args.app_toml)
+        root = destination_root(args, app_id, destination)
         if args.from_file and len(entries) != 1:
             raise Refused("--from-file needs exactly one [[fetch.files]] entry")
         for entry in entries:
@@ -232,7 +271,7 @@ def main(argv):
                     raise Refused(f"size mismatch: got {size}, pinned {entry['size']}")
                 if sha != entry["sha256"]:
                     raise Refused(f"sha256 mismatch: got {sha}, pinned {entry['sha256']}")
-                dest, files, nbytes = install(entry, args.root, archive, args.replace)
+                dest, files, nbytes = install(entry, root, archive, args.replace)
                 print(f"fetch=PASS url={entry['url']} sha256={sha} size={size} dest={dest} files={files} bytes={nbytes}")
     except Refused as e:
         print(f"fetch=FAIL reason={str(e).replace(' ', '_')[:400]}", flush=True)

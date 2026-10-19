@@ -1,4 +1,4 @@
-# MBHaxe on PocketForge: dev install (tsp-0qwbh.5)
+# MBHaxe on PocketForge: dev install (tsp-0qwbh.5, tsp-0qwbh.9)
 
 This puts `org.pocketforge.mbhaxe` on a running A133 device inside a live device window,
 without changing the image. It is written from the sources (image `pf-app@.service`,
@@ -17,6 +17,7 @@ executor plus an app package, not this procedure (see "Release path" at the end)
 | `/etc/systemd/system/pf-app@org.pocketforge.mbhaxe.service.d/10-policy.conf` | unit policy rendered by runtime `pf-app-policy-render` | root, 0644 |
 | `/var/lib/pocketforge/apps/org.pocketforge.mbhaxe/state/mbhaxe/` | created at launch: `settings.json`, `console.log`, `data/replays/` | gamer, 0700 parent |
 | `/var/cache/pocketforge/apps/org.pocketforge.mbhaxe/mbhaxe/tmp/` | created at launch: `TMPDIR` | gamer, 0700 parent |
+| `/var/cache/pocketforge/apps/org.pocketforge.mbhaxe/mbhaxe/converted/` | created by the game: `MBHAXE_CACHE_DIR`, heaps' resource-converter cache (converted fonts) | gamer, 0700 parent |
 
 `pf-app@.service` already exists on the image: it runs `pf-app-launch <id>` as `gamer` with
 the app directory as working directory, `XDG_STATE_HOME`/`XDG_CACHE_HOME` set to the paths
@@ -25,8 +26,11 @@ resolves `app.toml`, checks `[requirements]` against
 `/usr/share/pocketforge/platform-capabilities.toml` (GLES 3.0 against `gles_max`,
 `memory_mib` against `app_memory_budget_mib`, inputs against `inputs`), applies Landlock and
 execs `launch`. `launch` changes to the writable state directory, puts the bundled `lib/` on
-`LD_LIBRARY_PATH`, sets `ALSOFT_CONF`, `SDL_VIDEODRIVER=wayland` and `TMPDIR`, and execs
-`marblegame` (see the comments in `launch`).
+`LD_LIBRARY_PATH`, sets `ALSOFT_CONF`, `SDL_VIDEODRIVER=wayland`, `TMPDIR` and
+`MBHAXE_CACHE_DIR`, and execs `marblegame` (see the comments in `launch`). The dev install keeps
+`data/` inside the app directory, which `launch` falls back to when
+`/var/lib/pocketforge/apps/org.pocketforge.mbhaxe/data` (the release location) does not exist: the
+current image's sandbox cannot read the release location yet (see "Release path").
 
 Preconditions: an A133-open image with the gamescope session (`g1`), `pf-app@.service`,
 `pf-app-launch` and a schema-2 `platform-capabilities.toml`; the openmbu lane holds an open
@@ -161,19 +165,43 @@ paths here, none replaced). The data archive is identified by its pinned SHA256 
 
 The image-shipped route installs the app root from a package and lets the platform's fetch
 executor run `[fetch]` on the device. `pf-fetch.py` is the reference for the semantics this
-descriptor needs (pinned URL, size and SHA256; `strip_components` with GNU tar rules;
-refusal of unsafe members; atomic install; no change on refusal). Open points for the
-executor (platform/runtime, tracked from tsp-mc9m.41.996.4), all recorded in the
-tsp-0qwbh.5 report:
+descriptor needs (pinned URL, size and SHA256; `destination`; `strip_components` with GNU tar
+rules; refusal of unsafe members; atomic install; no change on refusal).
 
-1. Destination. The game needs `data/` beside `marblegame`, and the descriptor's
-   `dest = "data"` is relative to the app directory. The platform schema's
-   `destination` only offers `var`/`home`, and the app directory is read-only to the app
-   (Landlock, `ReadOnlyPaths=`). Either the executor installs into the app directory as
-   root before first launch, or the game gains a data-root override that points into
-   `XDG_DATA_HOME`/state (a game change; resource paths are exe-relative today).
+What the release layout looks like (tsp-0qwbh.9, the MBHaxe side of gap 1):
+
+- `app.toml` declares `[fetch] destination = "var"` with `dest = "data"`, so the executor installs
+  the game data at `/var/lib/pocketforge/apps/org.pocketforge.mbhaxe/data`, and nothing goes into
+  the read-only app directory.
+- The game takes its data directory from `MBHAXE_DATA_DIR` (`src/DataDir.hx`): a real
+  directory called `data`, not a symlink (otherwise it stops at start with a message on stderr and
+  exit status 2). It takes heaps' converter cache from `MBHAXE_CACHE_DIR`; without that variable, a
+  data directory whose `data/tmp/` cannot be written sends the cache to
+  `$XDG_CACHE_HOME/mbhaxe/converted`. With neither variable set, the game behaves as upstream does.
+- `launch` sets `MBHAXE_DATA_DIR` to `/var/lib/pocketforge/apps/<id>/data` when that exists. It
+  finds the path as the parent of the `XDG_STATE_HOME` that `pf-app@` sets. It always sets
+  `MBHAXE_CACHE_DIR` under `XDG_CACHE_HOME`, so the game never writes to its data.
+- On the laptop, `stage-app.sh --data-layout release` stages that layout
+  (`var/lib/pocketforge/apps/<id>/data`, no `data/` in the app root), and
+  `tests/launch-smoke.sh` runs it with the data beside the state directory, optionally read-only
+  (`--readonly-data`). `tests/data-dir-check.sh` covers the refusals: a symlinked, missing or
+  wrongly named data directory in either location.
+
+What remains is platform-side (runtime, image and platform repositories, tracked from
+tsp-mc9m.41.996.4 and tsp-ziac.4):
+
+1. Destination access (the platform half of gap 1). `pf-app@.service` already lists
+   `/var/lib/pocketforge/apps/%i` in `ReadWritePaths=`. However, `pf-app-launch`'s Landlock
+   policy (runtime `crates/pf-app-launch/src/policy.rs`, `derive_policy`) grants only the app
+   directory and `XDG_CONFIG_HOME`/`XDG_STATE_HOME`/`XDG_CACHE_HOME`, so the game cannot read
+   `/var/lib/pocketforge/apps/<id>/data` until the policy grants the fetch destination
+   (read-only is enough). The `"home"` destination (`~/.local/share/<dest>`) is no alternative:
+   the unit has `ProtectHome=yes`. Until the grant lands, the dev install keeps `data/` in the app
+   directory.
 2. Member selection. `strip_components = 2` already drops everything outside `data/`
-   (the upstream binaries sit at depth 2). An explicit include filter would say so
-   directly and survive an upstream layout change; the schema has none.
+   (the upstream binaries sit at depth 2). An explicit include filter would say so directly and
+   survive a change in the upstream layout. The schema has none.
 3. The JSON schema (`abi/app.schema.json`) does not list `[requirements]`, although the
    Python validator and the runtime resolver both accept it.
+4. No on-device fetch executor exists yet. `pf-fetch.py` is the reference: it runs on the
+   staging host, and the device has no Python.
