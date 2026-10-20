@@ -129,6 +129,12 @@ for h in fmt openal sdl ssl ui uv; do cp "$HL_INST/lib/$h.hdll" "$STAGE/"; done
 	"$STAGE/ui.hdll" "$STAGE/openal.hdll" "$STAGE/fmt.hdll" "$STAGE/sdl.hdll" "$STAGE/uv.hdll" "$STAGE/ssl.hdll" \
 	"$STAGE/libhl.so.1" -lSDL2-2.0 -luv -lm -lpthread -Wl,-rpath,'$ORIGIN' -Wl,--as-needed \
 	2>> "$WORK/cc-$ARCH-$VARIANT.log" || { tail -30 "$WORK/cc-$ARCH-$VARIANT.log" >&2; pf_die "marblegame link failed"; }
+# Window step-1 device probe (tests/pf-probe, tsp-0qwbh.10): same compiler, sysroot and libraries
+# as the game (SDL2, GLESv2, OpenAL Soft), shipped next to marblegame and run through launch.
+# shellcheck disable=SC2086
+"$CC" -O2 -std=c11 -D_GNU_SOURCE -Wall -Wextra $PREFIX_MAP -DPF_PROBE_VERSION="\"$VERSION\"" -I "$SR/usr/include/SDL2" \
+	-o "$STAGE/pf-probe" "$REPO/tests/pf-probe/pf-probe.c" -lSDL2-2.0 -lGLESv2 -lopenal -lm -Wl,--as-needed \
+	2> "$WORK/probe-$ARCH-$VARIANT.log" || { tail -30 "$WORK/probe-$ARCH-$VARIANT.log" >&2; pf_die "pf-probe build failed"; }
 
 # Licences of everything compiled into the shipped binaries.
 cp LICENSE "$STAGE/licenses/MBHaxe.txt"
@@ -209,6 +215,7 @@ manifest=$OUT/$NAME.manifest.json
 manifest_sha256=$(pf_sha256 "$OUT/$NAME.manifest.json")
 stage=$STAGE
 marblegame_sha256=$(pf_sha256 "$STAGE/marblegame")
+probe_sha256=$(pf_sha256 "$STAGE/pf-probe")
 generated_c_tree_sha256=$GEN_SHA
 max_glibc=$MAX_GLIBC
 builder=$BUILDER

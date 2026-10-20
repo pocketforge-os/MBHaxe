@@ -53,7 +53,7 @@ Steps, all from pins in `LOCK.md`, `pocketforge/deps.lock` and `pocketforge/buil
    and loader. `tests/gates-test.sh` is the red/green test: stub and real probes that must trip each
    gate, including a probe linked by the unwrapped host compiler (fails on Ubuntu 24.04's glibc 2.39).
 6. Output in `WORK/out/`: `mbhaxe-pf-<version>-<arch>[-diag].tar.zst` (top-level dir `mbhaxe-pf/`:
-   `marblegame`, `libhl.so.1`, the six hdlls, `licenses/`, `SHA256SUMS`, `MANIFEST.json`), the
+   `marblegame`, `pf-probe` (tests/pf-probe), `libhl.so.1`, the six hdlls, `licenses/`, `SHA256SUMS`, `MANIFEST.json`), the
    manifest beside it, a `.sha256`, and `<arch>-<variant>.env` with key=value results (artifact,
    sha256s, stage dir). The manifest records per-file sha256, the MBHaxe/hashlink/heaps commits,
    the lock-file digests, the builder package-set digest and the sysroot .deb list digest.
@@ -65,12 +65,19 @@ Two builds of the same commit are byte-identical (tarball included). The CI work
 credential-free pf-public runner class, in the pinned bookworm base image:
 
 - `aarch64-a`, `aarch64-b` and `determinism`: aarch64 is built twice on separate runners, and the
-  marblegame, tarball and generated-C sha256s must match (both values are printed to the log).
+  marblegame, pf-probe, tarball and generated-C sha256s must match (both values are printed to the
+  log).
 - `harness`: the x86_64 `pf_diag` build, then `tests/pf-harness/ci.sh`, which builds aarch64 for the
   qemu smoke, fetches the game data at job time with `pocketforge/app/pf-fetch.py` (the pinned
   `app.toml` `[fetch]` URL, SHA256 and size) and runs `tests/pf-harness/run.sh` on bookworm's Mesa
   22.3 Zink/lavapipe. The compositor there is cage, not weston: weston 10's headless backend has no
   `wl_seat`, and bookworm's SDL 2.26.5 crashes in `Wayland_InitMouse` without one.
+  The same job then runs `tests/pf-probe/ci.sh`: the window step-1 device probe (`pf-probe`, built
+  into every build next to `marblegame`) under the same cage/Zink/lavapipe stack through
+  `probe-launch` -> `launch`. It must PASS, its negative controls (`--negative`, a missing Wayland
+  socket, a renderer mismatch) must FAIL with a named reason, and the aarch64 probe must reach the
+  same depth under qemu-aarch64 as the game's smoke. See `pocketforge/app/DEV-INSTALL.md`
+  ("Window step 1").
 
 CI uploads nothing: results, hashes and pngcheck output go to the job log, and the game data and
 screenshots never leave the job container. Artifacts are

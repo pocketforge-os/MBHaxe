@@ -22,6 +22,7 @@
 #                    pf-app@ sets. Used when that directory exists (a symlink is passed on so the game
 #                    refuses it with its own message); otherwise the game uses data/ in the app
 #                    directory (the dev install). A caller's MBHAXE_DATA_DIR is kept as it is.
+#   MBHAXE_PROBE     1: exec pf-probe (window step-1 device probe) instead of marblegame; see below.
 # Everything else (WAYLAND_DISPLAY, XDG_RUNTIME_DIR, ...) comes from the unit and the
 # session environment file. Arguments are passed to marblegame unchanged.
 set -eu
@@ -54,4 +55,11 @@ MBHAXE_CACHE_DIR=${MBHAXE_CACHE_DIR:-$cache/converted}
 export LD_LIBRARY_PATH ALSOFT_CONF SDL_VIDEODRIVER TMPDIR MBHAXE_CACHE_DIR
 
 cd -- "$state"
+# Window step-1 device probe (tsp-0qwbh.10, tests/pf-probe): with MBHAXE_PROBE=1 (a pf-app@ unit
+# drop-in, or probe-launch) this runs pf-probe instead of the game, under this exact environment
+# and sandbox. MBHAXE_PROBE_ARGS holds its options (word-split; they contain no spaces).
+if [ "${MBHAXE_PROBE:-}" = 1 ]; then
+	# shellcheck disable=SC2086
+	exec "$app/pf-probe" ${MBHAXE_PROBE_ARGS:-} "$@"
+fi
 exec "$app/marblegame" "$@"
