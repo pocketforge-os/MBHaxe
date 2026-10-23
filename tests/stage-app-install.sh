@@ -11,6 +11,7 @@ APP_ID=org.pocketforge.mbhaxe
 WORK=${1:-}
 if [ -z "$WORK" ]; then
 	WORK=$(mktemp -d "${RUNNER_TEMP:-/tmp}/mbhaxe-stage-test.XXXXXX")
+	# shellcheck disable=SC2317 # invoked by the EXIT trap
 	cleanup() { find "$WORK" -mindepth 1 -delete; rmdir "$WORK"; }
 	trap cleanup EXIT
 else
@@ -55,7 +56,8 @@ printf '%s\n' \
 	'format = "tar.gz"' \
 	'strip_components = 2' \
 	'dest = "data"' > "$WORK/app/$APP_ID/app.toml"
-(cd "$WORK/app/$APP_ID" && find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS)
+(cd "$WORK/app/$APP_ID" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > "$WORK/SHA256SUMS"
+mv "$WORK/SHA256SUMS" "$WORK/app/$APP_ID/SHA256SUMS"
 tar -C "$WORK/app" -cf - "$APP_ID" | zstd -q -o "$WORK/app.tar.zst"
 sha256sum "$WORK/app.tar.zst" > "$WORK/app.tar.zst.sha256"
 printf 'contract fixture\n' > "$WORK/contract.toml"
@@ -138,7 +140,7 @@ check documented-preflight-negative test "$negative_ok" -eq 1
 tar -C "$WORK/stage" --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 \
 	-cf "$WORK/mbhaxe-stage.tar" opt usr etc PF-STAGE.files PF-STAGE.sha256
 mkdir -p "$WORK/install/opt" "$WORK/install/usr" "$WORK/install/etc"
-if INSTALL_ROOT=$WORK/install R=$WORK eval "$(cat "$WORK/doc-command.sh")"; then
+if (cd "$WORK" && INSTALL_ROOT=$WORK/install R=$WORK eval "$(cat "$WORK/doc-command.sh")"); then
 	doc_rc=0
 else
 	doc_rc=$?
