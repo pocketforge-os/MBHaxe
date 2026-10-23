@@ -62,7 +62,7 @@ pocketforge/app/stage-app.sh \
   --policy-render RUNTIME/target/release/pf-app-policy-render \
   --platform-contract PULLED/platform-capabilities.toml \
   --resource-inventory PULLED/app-policy.resources.json
-tar -C STAGE --sort=name --owner=0 --group=0 --numeric-owner \
+tar -C STAGE --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 \
   -cf mbhaxe-stage.tar opt usr etc PF-STAGE.files PF-STAGE.sha256
 sha256sum mbhaxe-stage.tar > mbhaxe-stage.tar.sha256
 ```
@@ -103,8 +103,18 @@ come out of the memory under test.
 R=/var/tmp/pf-openmbu/<gen>
 cd "$R"
 sha256sum -c mbhaxe-stage.tar.sha256                       # before every use
-sudo -n test ! -e /opt/pocketforge/apps/org.pocketforge.mbhaxe   # refuse to overlay an old install
-sudo -n tar -xf mbhaxe-stage.tar -C / --no-same-owner --no-overwrite-dir --keep-old-files \
+require_absent_real_path() {   # refuse existing targets, dangling symlinks and symlinked parents
+  p=$1
+  sudo -n test ! -e "$p" && sudo -n test ! -L "$p" || return 1
+  while [ "$p" != / ]; do
+    p=${p%/*}; [ -n "$p" ] || p=/
+    sudo -n test ! -L "$p" || return 1
+  done
+}
+require_absent_real_path /opt/pocketforge/apps/org.pocketforge.mbhaxe
+require_absent_real_path /usr/share/pocketforge/app-policy/org.pocketforge.mbhaxe.resources.json
+require_absent_real_path /etc/systemd/system/pf-app@org.pocketforge.mbhaxe.service.d
+sudo -n tar -xf mbhaxe-stage.tar -C / --no-same-owner --no-overwrite-dir \
   opt/pocketforge/apps/org.pocketforge.mbhaxe \
   usr/share/pocketforge/app-policy/org.pocketforge.mbhaxe.resources.json \
   etc/systemd/system/pf-app@org.pocketforge.mbhaxe.service.d
@@ -114,9 +124,9 @@ sudo -n systemctl daemon-reload
 systemctl cat pf-app@org.pocketforge.mbhaxe.service | grep -c '^# /etc/systemd/system/pf-app@org.pocketforge.mbhaxe.service.d/10-policy.conf'
 ```
 
-`--no-same-owner` as root makes every file root-owned; `--no-overwrite-dir` leaves the
-metadata of existing `/opt`, `/usr`, `/etc` directories untouched; `--keep-old-files`
-refuses to replace anything already present.
+The three preflights refuse to replace any install target, including dangling symlinks, and
+refuse symlinked parent components. `--no-same-owner` as root makes every file root-owned;
+`--no-overwrite-dir` leaves the metadata of existing `/opt`, `/usr`, `/etc` directories untouched.
 
 ## 4. Window step 1: device probe (before the game)
 

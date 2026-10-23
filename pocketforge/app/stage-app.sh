@@ -100,5 +100,13 @@ fi
 } > "$ROOT/PF-STAGE.files"
 tops=(opt)
 for d in usr etc var; do [ ! -d "$ROOT/$d" ] || tops+=("$d"); done
+# The archive is installed by root and executed by the unprivileged app user. Do
+# not let the build host's umask decide whether that user can traverse or execute
+# the staged tree. Preserve which ordinary files are executable, but normalize
+# every installed mode to the read-only app contract.
+find "$ROOT" -type d -exec chmod 0755 {} +
+find "$ROOT" -type f -perm /111 -exec chmod 0755 {} +
+find "$ROOT" -type f ! -perm /111 -exec chmod 0644 {} +
 (cd "$ROOT" && find "${tops[@]}" -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > "$ROOT/PF-STAGE.sha256"
+chmod 0644 "$ROOT/PF-STAGE.sha256"
 echo "stage=PASS root=$ROOT layout=$LAYOUT app=$APP files=$(wc -l < "$ROOT/PF-STAGE.sha256") bytes=$(cd "$ROOT" && du -sbc "${tops[@]}" | tail -n 1 | cut -f1)"

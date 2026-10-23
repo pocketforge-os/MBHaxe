@@ -62,6 +62,10 @@ for p in cage libwlroots10 libgl1-mesa-dri mesa-vulkan-drivers libsdl2-2.0-0 str
 	echo "harness_package $(dpkg-query -W -f='${Package} ${Version}' "$p")"
 done
 
+group "staging and documented install regression"
+"$REPO/tests/stage-app-install.sh" "$WORK/stage-app-install"
+endgroup
+
 # ---- 3. game data: pinned fetch only ----------------------------------------------------------
 DATA_ROOT=$WORK/harness-data
 OUT=$WORK/harness-out
