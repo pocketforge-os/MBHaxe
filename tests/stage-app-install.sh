@@ -93,7 +93,7 @@ fi
 
 # Extract, rather than copy, section 3's preflight targets and tar command. The
 # only command transformation redirects installation from / into the fixture root.
-python3 -I - "$DOC" "$WORK/doc-command.sh" "$WORK/preflight-targets" <<'PY'
+python3 -I - "$DOC" "$WORK/doc-command.sh" "$WORK/doc-preflight.sh" "$WORK/preflight-targets" <<'PY'
 import pathlib, re, shlex, sys
 
 text = pathlib.Path(sys.argv[1]).read_text()
@@ -104,8 +104,8 @@ preflights = []
 command = []
 collect = False
 for line in lines:
-    if line.startswith("sudo -n test ! -e "):
-        words = shlex.split(line.split("#", 1)[0])
+    if line.startswith("require_absent_real_path /"):
+        words = shlex.split(line)
         preflights.append(words[-1])
     if line.startswith("sudo -n tar "):
         collect = True
@@ -115,27 +115,63 @@ for line in lines:
             break
 if not command:
     raise SystemExit("section 3 has no sudo -n tar command")
+function = re.search(r"require_absent_real_path\(\) \{.*?\n\}", block, re.S)
+if not function:
+    raise SystemExit("section 3 has no require_absent_real_path function")
 cmd = "\n".join(command).replace("sudo -n tar ", "tar ", 1)
 cmd = cmd.replace(" -C / ", ' -C "$INSTALL_ROOT" ', 1)
 pathlib.Path(sys.argv[2]).write_text(cmd + "\n")
-pathlib.Path(sys.argv[3]).write_text("\n".join(preflights) + "\n")
+pathlib.Path(sys.argv[3]).write_text(function.group(0).replace("sudo -n test", "test") + "\n")
+pathlib.Path(sys.argv[4]).write_text("\n".join(preflights) + "\n")
 PY
 
+# shellcheck source=/dev/null
+. "$WORK/doc-preflight.sh"
 mapfile -t targets < "$WORK/preflight-targets"
 check documented-three-target-preflights test "${#targets[@]}" -eq 3
 preflight_ok=1
-for target in "${targets[@]}"; do [ ! -e "$WORK/install$target" ] || preflight_ok=0; done
+for target in "${targets[@]}"; do
+	mkdir -p "$WORK/install$(dirname "$target")"
+	require_absent_real_path "$WORK/install$target" || preflight_ok=0
+done
 check documented-preflight-positive test "$preflight_ok" -eq 1
-negative_ok=1
+
+existing_ok=1
 for target in "${targets[@]}"; do
 	case $target in
 	*.json) mkdir -p "$WORK/install-negative$(dirname "$target")"; : > "$WORK/install-negative$target" ;;
 	*) mkdir -p "$WORK/install-negative$target" ;;
 	esac
-	if [ ! -e "$WORK/install-negative$target" ]; then negative_ok=0; fi
+	if require_absent_real_path "$WORK/install-negative$target"; then existing_ok=0; fi
 	find "$WORK/install-negative" -mindepth 1 -delete
 done
-check documented-preflight-negative test "$negative_ok" -eq 1
+check documented-preflight-existing-target-negative test "$existing_ok" -eq 1
+
+dangling_ok=1
+for target in "${targets[@]}"; do
+	mkdir -p "$WORK/install-negative$(dirname "$target")"
+	ln -s missing "$WORK/install-negative$target"
+	if require_absent_real_path "$WORK/install-negative$target"; then dangling_ok=0; fi
+	find "$WORK/install-negative" -mindepth 1 -delete
+done
+check documented-preflight-dangling-symlink-negative test "$dangling_ok" -eq 1
+
+parents_ok=1
+for target in "${targets[@]}"; do
+	rest=${target#/}
+	rest=${rest%/*}
+	prefix=
+	while [ -n "$rest" ]; do
+		part=${rest%%/*}
+		if [ "$rest" = "$part" ]; then rest=; else rest=${rest#*/}; fi
+		prefix=$prefix/$part
+		mkdir -p "$WORK/install-negative$(dirname "$prefix")" "$WORK/redirect"
+		ln -s "$WORK/redirect" "$WORK/install-negative$prefix"
+		if require_absent_real_path "$WORK/install-negative$target"; then parents_ok=0; fi
+		find "$WORK/install-negative" -mindepth 1 -delete
+	done
+done
+check documented-preflight-each-symlinked-parent-negative test "$parents_ok" -eq 1
 
 tar -C "$WORK/stage" --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 \
 	-cf "$WORK/mbhaxe-stage.tar" opt usr etc PF-STAGE.files PF-STAGE.sha256
