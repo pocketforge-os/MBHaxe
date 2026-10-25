@@ -109,6 +109,8 @@ jobs:
         run: pocketforge/build/ci.sh x86_64 diag "$RUNNER_TEMP/pf-work"
       - name: regression harness
         run: tests/pf-harness/ci.sh "$RUNNER_TEMP/pf-work"
+      - name: pfvd exact-build provenance tests
+        run: python3 -B -I tests/pfvd/run_desktop_check_test.py
       # Runs even when the harness failed: the probe is independent evidence for the device window.
       - name: window step-1 device probe (tsp-0qwbh.10)
         if: ${{ !cancelled() }}
