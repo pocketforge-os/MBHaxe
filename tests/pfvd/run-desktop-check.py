@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 
 def sha256(path):
@@ -64,17 +65,17 @@ def main():
     if args.verify_only:
         return
     app_state = report / "app-state"
-    runtime = report / "pfvd-runtime"
     config = report / "pfvd-config"
-    for path in (app_state, runtime, config):
+    for path in (app_state, config):
         path.mkdir(mode=0o700)
-    env = os.environ.copy()
-    env.update(PFVD_RUNTIME_DIR=str(runtime), XDG_CONFIG_HOME=str(config))
-    subprocess.run(
-        [cli, "check", "--scenario", repo / "tests/pfvd/mbhaxe-desktop.toml",
-         "--report-dir", report],
-        cwd=app_state, env=env, check=True,
-    )
+    with tempfile.TemporaryDirectory(prefix="pfvd-", dir=repo / ".pf-build") as runtime:
+        env = os.environ.copy()
+        env.update(PFVD_RUNTIME_DIR=runtime, XDG_CONFIG_HOME=str(config))
+        subprocess.run(
+            [cli, "check", "--scenario", repo / "tests/pfvd/mbhaxe-desktop.toml",
+             "--report-dir", report],
+            cwd=app_state, env=env, check=True,
+        )
 
 
 if __name__ == "__main__":
