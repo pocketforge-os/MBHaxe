@@ -17,8 +17,10 @@ python3 -I pocketforge/app/pf-fetch.py \
   --cache .pf-build/fetch-cache
 ```
 
-Run with the pfvd CLI installed in the sibling admitted worktree. Keep its
-runtime and configuration isolated from the user's regular pfvd setup:
+Run with a pfvd CLI that includes desktop scenario support
+([pocketforge-os/pfvd#67](https://github.com/pocketforge-os/pfvd/pull/67)),
+installed in the sibling admitted worktree. Keep its runtime and configuration
+isolated from the user's regular pfvd setup:
 
 ```sh
 install -d -m 700 .pf-build/pfvd-check/runtime .pf-build/pfvd-check/config
