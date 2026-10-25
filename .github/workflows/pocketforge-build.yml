@@ -64,6 +64,8 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           persist-credentials: false
+      - name: pfvd exact-build provenance tests
+        run: python3 -B -I tests/pfvd/run_desktop_check_test.py
       - id: build
         run: pocketforge/build/ci.sh aarch64 product "$RUNNER_TEMP/pf-work"
 

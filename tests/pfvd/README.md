@@ -10,7 +10,7 @@ diagnostic frame-time output.
 Build and fetch the owner-local game data first:
 
 ```sh
-pocketforge/build/ci.sh x86_64 diag
+pocketforge/build/ci.sh x86_64 diag .pf-build
 python3 -I pocketforge/app/pf-fetch.py \
   --app-toml pocketforge/app/app.toml \
   --root .pf-build/runtime \
@@ -19,16 +19,15 @@ python3 -I pocketforge/app/pf-fetch.py \
 
 Run with a pfvd CLI that includes desktop scenario support
 ([pocketforge-os/pfvd#67](https://github.com/pocketforge-os/pfvd/pull/67)),
-installed in the sibling admitted worktree. Keep its runtime and configuration
-isolated from the user's regular pfvd setup:
+installed in the sibling admitted worktree. The runner rejects a build manifest
+from any commit other than `HEAD`, verifies the ELF against that manifest, and
+records both hashes in `provenance.json` before loading the app. It also creates
+fresh report, pfvd, and app-state directories for every run:
 
 ```sh
-install -d -m 700 .pf-build/pfvd-check/runtime .pf-build/pfvd-check/config
-PFVD_RUNTIME_DIR="$PWD/.pf-build/pfvd-check/runtime" \
-XDG_CONFIG_HOME="$PWD/.pf-build/pfvd-check/config" \
-../pfvd/inst/bin/pfvd-cli check \
-  --scenario tests/pfvd/mbhaxe-desktop.toml \
-  --report-dir /home/matt/recovery/tsp-openmbu/pfvd/<run>
+python3 -I tests/pfvd/run-desktop-check.py \
+  --pfvd-cli ../pfvd/inst/bin/pfvd-cli \
+  --report-dir /home/matt/recovery/tsp-openmbu/pfvd/<new-run>
 ```
 
 The report, captures, cache, and fetched game data are owner-local evidence and
