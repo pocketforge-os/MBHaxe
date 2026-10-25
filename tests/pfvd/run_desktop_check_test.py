@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -32,6 +33,19 @@ class VerifyBuildTest(unittest.TestCase):
                 "files": [{"path": "marblegame", "sha256": elf_sha}]}
         (self.out / "fixture-x86_64-diag.manifest.json").write_text(json.dumps(body))
 
+    def git_repo(self):
+        repo = self.repo / "source"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q", repo], check=True)
+        tracked = repo / "tracked"
+        tracked.write_text("clean\n")
+        subprocess.run(["git", "-C", repo, "add", "tracked"], check=True)
+        subprocess.run(
+            ["git", "-C", repo, "-c", "user.name=test", "-c", "user.email=test@example.invalid",
+             "commit", "-qm", "fixture"], check=True,
+        )
+        return repo, tracked
+
     def test_accepts_exact_commit_and_elf(self):
         self.manifest()
         result = MODULE.verify_build(self.repo, "a" * 40)
@@ -46,6 +60,19 @@ class VerifyBuildTest(unittest.TestCase):
         self.manifest(elf_sha="0" * 64)
         with self.assertRaisesRegex(RuntimeError, "does not match"):
             MODULE.verify_build(self.repo, "a" * 40)
+
+    def test_checkout_requires_clean_tracked_files(self):
+        repo, tracked = self.git_repo()
+        self.assertEqual(len(MODULE.clean_checkout_commit(repo)), 40)
+        tracked.write_text("modified\n")
+        with self.assertRaisesRegex(RuntimeError, "not clean"):
+            MODULE.clean_checkout_commit(repo)
+
+    def test_checkout_rejects_untracked_files(self):
+        repo, _ = self.git_repo()
+        (repo / "untracked").write_text("unexpected\n")
+        with self.assertRaisesRegex(RuntimeError, "not clean"):
+            MODULE.clean_checkout_commit(repo)
 
 
 if __name__ == "__main__":

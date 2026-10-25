@@ -19,6 +19,18 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def clean_checkout_commit(repo):
+    status = subprocess.check_output(
+        ["git", "-C", repo, "status", "--porcelain=v1", "--untracked-files=all"],
+        text=True,
+    )
+    if status:
+        raise RuntimeError("checkout is not clean")
+    return subprocess.check_output(
+        ["git", "-C", repo, "rev-parse", "HEAD"], text=True
+    ).strip()
+
+
 def verify_build(repo, commit):
     elf = repo / ".pf-build/stage/x86_64-diag/mbhaxe-pf/marblegame"
     matches = []
@@ -53,9 +65,7 @@ def main():
     parser.add_argument("--verify-only", action="store_true")
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[2]
-    commit = subprocess.check_output(
-        ["git", "-C", repo, "rev-parse", "HEAD"], text=True
-    ).strip()
+    commit = clean_checkout_commit(repo)
     provenance = verify_build(repo, commit)
     cli = args.pfvd_cli.resolve(strict=True)
     provenance["pfvd_cli_sha256"] = sha256(cli)
