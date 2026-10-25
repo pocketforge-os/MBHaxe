@@ -1,0 +1,232 @@
+schema = "pfvd.check/1"
+name = "MBHaxe desktop menu-to-level soak"
+
+[session]
+name = "mbhaxe-desktop-check"
+device = "../../../pfvd/crates/pfvd/bundled/platform/devices/a133"
+tier = "desktop"
+input_backend = "record"
+
+[[steps]]
+name = "force SDL X11 EGL"
+command = "run env set"
+args = { name = "SDL_VIDEO_X11_FORCE_EGL", value = "1" }
+
+[[steps]]
+name = "select Zink"
+command = "run env set"
+args = { name = "GALLIUM_DRIVER", value = "zink" }
+
+[[steps]]
+name = "select Mesa Zink driver"
+command = "run env set"
+args = { name = "MESA_LOADER_DRIVER_OVERRIDE", value = "zink" }
+
+[[steps]]
+name = "select lavapipe ICD"
+command = "run env set"
+args = { name = "VK_ICD_FILENAMES", value = "/usr/share/vulkan/icd.d/lvp_icd.json" }
+
+[[steps]]
+name = "require GLES 3"
+command = "run env set"
+args = { name = "MESA_GLES_VERSION_OVERRIDE", value = "3.0" }
+
+[[steps]]
+name = "require GLSL ES 300"
+command = "run env set"
+args = { name = "MESA_GLSL_VERSION_OVERRIDE", value = "300" }
+
+[[steps]]
+name = "disable SDL audio device"
+command = "run env set"
+args = { name = "SDL_AUDIODRIVER", value = "dummy" }
+
+[[steps]]
+name = "disable OpenAL output"
+command = "run env set"
+args = { name = "ALSOFT_DRIVERS", value = "null" }
+
+[[steps]]
+name = "pin desktop window origin"
+command = "run env set"
+args = { name = "SDL_VIDEO_WINDOW_POS", value = "0,0" }
+
+[[steps]]
+name = "set local game data"
+command = "run env set"
+args = { name = "MBHAXE_DATA_DIR", value = "${scenario_dir}/../../.pf-build/runtime/data" }
+
+[[steps]]
+name = "set isolated cache"
+command = "run env set"
+args = { name = "MBHAXE_CACHE_DIR", value = "${report_dir}/cache" }
+
+[[steps]]
+name = "enable diagnostic markers"
+command = "run env set"
+args = { name = "MBHAXE_GLCHECK", value = "1" }
+
+[[steps]]
+name = "load x86_64 diagnostic ELF"
+command = "run load"
+args = { bundle = "../../.pf-build/stage/x86_64-diag/mbhaxe-pf/marblegame" }
+
+[[steps]]
+name = "start at first frame"
+command = "run start"
+timeout = "45s"
+args = { wait = "first-frame", timeout = "40s" }
+
+[[steps]]
+name = "allow menu assets to settle"
+command = "wait"
+args = { duration = "8s" }
+
+[[steps]]
+name = "assert main menu"
+command = "log tail"
+args = { source = "app", lines = 128 }
+assert_regex = "\\[diag\\] gui gui\\.MainMenuGui"
+
+[[steps]]
+name = "capture menu"
+command = "screen capture"
+args = { file = "${report_dir}/menu.png" }
+
+[[steps]]
+name = "choose single player"
+command = "input tap"
+args = { control = "start", hold = "80ms" }
+
+[[steps]]
+name = "allow difficulty menu"
+command = "wait"
+args = { duration = "2s" }
+
+[[steps]]
+name = "choose beginner"
+command = "input tap"
+args = { control = "start", hold = "80ms" }
+
+[[steps]]
+name = "allow level menu"
+command = "wait"
+args = { duration = "4s" }
+
+[[steps]]
+name = "start first level"
+command = "input tap"
+args = { control = "start", hold = "80ms" }
+
+[[steps]]
+name = "allow first level to load"
+command = "wait"
+args = { duration = "8s" }
+
+[[steps]]
+name = "assert ready level"
+command = "log tail"
+args = { source = "app", lines = 128 }
+assert_regex = "\\[diag\\] world ready Learning to Roll"
+
+[[steps]]
+name = "prove menu changed to level"
+command = "screen compare"
+args = { ref = "${report_dir}/menu.png", tolerance = 0.0 }
+expect_mismatch = true
+
+[[steps]]
+name = "capture in-level"
+command = "screen capture"
+args = { file = "${report_dir}/level.png" }
+
+[[steps]]
+name = "soak in level for ten minutes"
+command = "wait"
+args = { duration = "10m" }
+
+[[steps]]
+name = "assert runtime survived soak"
+command = "run status"
+wait_for = { pointer = "/state", equals = "running", timeout = "5s", interval = "250ms" }
+
+[[steps]]
+name = "capture level after soak"
+command = "screen capture"
+args = { file = "${report_dir}/level-after-soak.png" }
+
+[[steps]]
+name = "record indicative frame rate"
+command = "log tail"
+args = { source = "app", lines = 128 }
+assert_regex = "\\[diag\\] frame [0-9]+ avg frame time [0-9.]+ ms"
+
+[[cleanup]]
+name = "stop desktop runtime"
+command = "run stop"
+
+[[cleanup]]
+name = "unset forced X11 EGL"
+command = "run env unset"
+args = { name = "SDL_VIDEO_X11_FORCE_EGL" }
+
+[[cleanup]]
+name = "unset Zink"
+command = "run env unset"
+args = { name = "GALLIUM_DRIVER" }
+
+[[cleanup]]
+name = "unset Mesa driver"
+command = "run env unset"
+args = { name = "MESA_LOADER_DRIVER_OVERRIDE" }
+
+[[cleanup]]
+name = "unset Vulkan ICD"
+command = "run env unset"
+args = { name = "VK_ICD_FILENAMES" }
+
+[[cleanup]]
+name = "unset GLES version"
+command = "run env unset"
+args = { name = "MESA_GLES_VERSION_OVERRIDE" }
+
+[[cleanup]]
+name = "unset GLSL version"
+command = "run env unset"
+args = { name = "MESA_GLSL_VERSION_OVERRIDE" }
+
+[[cleanup]]
+name = "unset SDL audio"
+command = "run env unset"
+args = { name = "SDL_AUDIODRIVER" }
+
+[[cleanup]]
+name = "unset OpenAL output"
+command = "run env unset"
+args = { name = "ALSOFT_DRIVERS" }
+
+[[cleanup]]
+name = "unset window origin"
+command = "run env unset"
+args = { name = "SDL_VIDEO_WINDOW_POS" }
+
+[[cleanup]]
+name = "unset game data"
+command = "run env unset"
+args = { name = "MBHAXE_DATA_DIR" }
+
+[[cleanup]]
+name = "unset cache"
+command = "run env unset"
+args = { name = "MBHAXE_CACHE_DIR" }
+
+[[cleanup]]
+name = "unset diagnostic markers"
+command = "run env unset"
+args = { name = "MBHAXE_GLCHECK" }
+
+[[cleanup]]
+name = "close desktop session"
+command = "session close"
+args = { force = true }
