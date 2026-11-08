@@ -132,6 +132,8 @@ class EndGameGui extends GuiImage {
 		}
 
 		var rating = calcRating(score * 1000, mission.qualifyTime * 1000, mission.goldTime * 1000, Std.parseInt(mission.missionInfo.difficulty));
+		if (mission.isLocal)
+			rating = 0;
 
 		// var myScore = {name: "Player", time: score};
 		// Settings.saveScore(mission.path, myScore, scoreType);
@@ -189,24 +191,26 @@ class EndGameGui extends GuiImage {
 		// lbButton.horizSizing = Right;
 		// bottomBar.addChild(lbButton);
 
-		var nextButton = new GuiXboxButton("Next", 160);
-		nextButton.position = new Vector(960, 0);
-		nextButton.vertSizing = Bottom;
-		nextButton.horizSizing = Right;
-		nextButton.gamepadAccelerator = [Settings.gamepadSettings.ok];
-		nextButton.accelerators = [hxd.Key.ENTER];
-		nextButton.pressedAction = (e) -> {
-			if (MarbleGame.canvas.children.length == 1)
-				continueFunc(nextButton);
+		if (!mission.isLocal) {
+			var nextButton = new GuiXboxButton("Next", 160);
+			nextButton.position = new Vector(960, 0);
+			nextButton.vertSizing = Bottom;
+			nextButton.horizSizing = Right;
+			nextButton.gamepadAccelerator = [Settings.gamepadSettings.ok];
+			nextButton.accelerators = [hxd.Key.ENTER];
+			nextButton.pressedAction = (e) -> {
+				if (MarbleGame.canvas.children.length == 1)
+					continueFunc(nextButton);
+			}
+			bottomBar.addChild(nextButton);
 		}
-		bottomBar.addChild(nextButton);
 		var rewindUsed = MarbleGame.instance.world.rewindUsed;
 		var cheatsUsed = MarbleGame.instance.world.cheatsUsed;
 
 		var misPath = mission.isClaMission ? 'custom/mbu/${mission.id}' : mission.path;
 
 		#if !offline
-		if (!cheatsUsed) {
+		if (!cheatsUsed && !mission.isLocal) {
 			var submitScore = () -> {
 				var lbScoreValue = score;
 				if (scoreType == Score)

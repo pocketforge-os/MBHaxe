@@ -78,6 +78,7 @@ typedef ControlsSettings = {
 	var chat:Int;
 	var oobRespawnKeyByPowerup:Bool;
 	var moddedController:Bool;
+	var eightWayController:Bool;
 }
 
 typedef TouchSettings = {
@@ -108,6 +109,7 @@ typedef GamepadSettings = {
 	var invertXAxis:Bool;
 	var invertYAxis:Bool;
 	var axisDeadzone:Float;
+	var outerDeadzone:Float;
 	var respawn:Array<String>;
 	var blast:Array<String>;
 	var rewind:Array<String>;
@@ -180,7 +182,8 @@ class Settings {
 		rewind: Key.R,
 		chat: Key.T,
 		oobRespawnKeyByPowerup: false,
-		moddedController: false
+		moddedController: false,
+		eightWayController: false
 	};
 
 	public static var touchSettings:TouchSettings = {
@@ -211,6 +214,7 @@ class Settings {
 		invertXAxis: false,
 		invertYAxis: false,
 		axisDeadzone: 0.15,
+		outerDeadzone: 0.9,
 		respawn: ["back"],
 		blast: ["X", "LB", "RB"],
 		rewind: ["Y"],
@@ -469,6 +473,8 @@ class Settings {
 			if (gamepadSettings.alt2 == null) {
 				gamepadSettings.alt2 = "Y";
 			}
+			if (gamepadSettings.outerDeadzone == 0)
+				gamepadSettings.outerDeadzone = 0.9;
 			if (json.stats != null) {
 				playStatistics = json.stats;
 				#if js
@@ -510,6 +516,9 @@ class Settings {
 			if (controlsSettings.moddedController == null) {
 				controlsSettings.moddedController = false;
 			}
+			if (controlsSettings.eightWayController == null) {
+				controlsSettings.eightWayController = false;
+			}
 			if (optionsSettings.rewindEnabled == null) {
 				optionsSettings.rewindEnabled = false;
 			}
@@ -518,6 +527,9 @@ class Settings {
 			}
 			if (achievementProgression == null)
 				achievementProgression = 0;
+			if (gamepadSettings.outerDeadzone == null) {
+				gamepadSettings.outerDeadzone = 0.9;
+			}
 			#end
 			highscoreName = json.highscoreName;
 			if (highscoreName == null) {
