@@ -1,0 +1,65 @@
+#!/bin/sh
+# MBHaxe launcher for PocketForge OS ([launch].exec in app.toml, tsp-0qwbh.5, tsp-0qwbh.9).
+#
+# pf-app@<id>.service runs `pf-app-launch <id>`, which execs this file with the working
+# directory set to the app directory /opt/pocketforge/apps/<id>. That directory is read-only
+# for the app (ReadOnlyPaths= and Landlock read+execute), but the game writes settings.json,
+# console.log and data/replays/ to its working directory, so this wrapper changes to a
+# per-app directory under XDG_STATE_HOME (pf-app@ sets it to
+# /var/lib/pocketforge/apps/<id>/state, which Landlock grants read+write).
+#
+# Environment it sets:
+#   LD_LIBRARY_PATH  <app>/lib: the bundled Debian bookworm libraries (bundle.lock). The
+#                    hdlls carry no RUNPATH, so marblegame's RUNPATH $ORIGIN does not reach
+#                    their dependencies (libopenal.so.1, libturbojpeg.so.0, ...).
+#   ALSOFT_CONF      <app>/alsoft.conf (OpenAL Soft: ALSA backend, 48 kHz, no HRTF).
+#   SDL_VIDEODRIVER  wayland (the session compositor; no GLX on the device).
+#   TMPDIR           a per-app directory under XDG_CACHE_HOME (Landlock grants no /tmp).
+#   MBHAXE_CACHE_DIR heaps' resource-converter cache, under XDG_CACHE_HOME (the game would otherwise
+#                    write data/tmp/, and the data directory may be read-only).
+#   MBHAXE_DATA_DIR  the game data fetched by the platform: app.toml [fetch] destination "var" puts
+#                    data/ in /var/lib/pocketforge/apps/<id>/, the parent of the XDG_STATE_HOME that
+#                    pf-app@ sets. Used when that directory exists (a symlink is passed on so the game
+#                    refuses it with its own message); otherwise the game uses data/ in the app
+#                    directory (the dev install). A caller's MBHAXE_DATA_DIR is kept as it is.
+#   MBHAXE_PROBE     1: exec pf-probe (window step-1 device probe) instead of marblegame; see below.
+# Everything else (WAYLAND_DISPLAY, XDG_RUNTIME_DIR, ...) comes from the unit and the
+# session environment file. Arguments are passed to marblegame unchanged.
+set -eu
+
+self=$(readlink -f -- "$0")
+app=$(dirname -- "$self")
+[ -x "$app/marblegame" ] || { echo "mbhaxe launch: $app/marblegame is missing" >&2; exit 66; }
+
+state=${XDG_STATE_HOME:-${HOME:?neither XDG_STATE_HOME nor HOME is set}/.local/state}/mbhaxe
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/mbhaxe
+mkdir -p -- "$state" "$cache/tmp"
+
+if [ -z "${MBHAXE_DATA_DIR:-}" ]; then
+	case ${XDG_STATE_HOME:-} in
+	*/apps/org.pocketforge.mbhaxe/state)
+		fetched=${XDG_STATE_HOME%/state}/data
+		if [ -d "$fetched" ] || [ -L "$fetched" ]; then
+			MBHAXE_DATA_DIR=$fetched
+			export MBHAXE_DATA_DIR
+		fi
+		;;
+	esac
+fi
+
+LD_LIBRARY_PATH=$app/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+ALSOFT_CONF=$app/alsoft.conf
+SDL_VIDEODRIVER=wayland
+TMPDIR=$cache/tmp
+MBHAXE_CACHE_DIR=${MBHAXE_CACHE_DIR:-$cache/converted}
+export LD_LIBRARY_PATH ALSOFT_CONF SDL_VIDEODRIVER TMPDIR MBHAXE_CACHE_DIR
+
+cd -- "$state"
+# Window step-1 device probe (tsp-0qwbh.10, tests/pf-probe): with MBHAXE_PROBE=1 (a pf-app@ unit
+# drop-in, or probe-launch) this runs pf-probe instead of the game, under this exact environment
+# and sandbox. MBHAXE_PROBE_ARGS holds its options (word-split; they contain no spaces).
+if [ "${MBHAXE_PROBE:-}" = 1 ]; then
+	# shellcheck disable=SC2086
+	exec "$app/pf-probe" ${MBHAXE_PROBE_ARGS:-} "$@"
+fi
+exec "$app/marblegame" "$@"

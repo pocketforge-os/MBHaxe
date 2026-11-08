@@ -1,0 +1,16 @@
+#!/bin/sh
+# Run the window step-1 device probe (pf-probe, tsp-0qwbh.10) exactly as the game is run: through
+# the app's own launch, so LD_LIBRARY_PATH (the bundled OpenAL Soft and its libsndio), ALSOFT_CONF,
+# SDL_VIDEODRIVER=wayland, TMPDIR and the working directory are the game's. Installed next to
+# launch in the app root (pocketforge/build/app-root.sh).
+#
+# usage: probe-launch [pf-probe options]      (see tests/pf-probe/pf-probe.c; e.g. --negative)
+# On the device, prefer the pf-app@ route in pocketforge/app/DEV-INSTALL.md (window step 1): it
+# also applies the unit's sandbox and session environment.
+set -eu
+self=$(readlink -f -- "$0")
+app=$(dirname -- "$self")
+[ -x "$app/pf-probe" ] || { echo "probe-launch: $app/pf-probe is missing" >&2; exit 66; }
+MBHAXE_PROBE=1
+export MBHAXE_PROBE
+exec "$app/launch" "$@"
