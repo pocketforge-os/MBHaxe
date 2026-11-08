@@ -218,6 +218,7 @@ class MarbleWorld extends Scheduler {
 	public var cheatsUsed:Bool = false;
 
 	public var inputRecorder:InputRecorder;
+	public var playtestPointManager:PlaytestPointManager;
 	public var isReplayingMovement:Bool = false;
 	public var currentInputMoves:Array<InputRecorderFrame>;
 
@@ -273,7 +274,7 @@ class MarbleWorld extends Scheduler {
 			misGameMode = "scrum";
 		// In multiplayer, host/client can override the game mode via the lobby selector
 		this.isMultiplayer = multiplayer;
-		if (isMultiplayer && Net.selectedGameMode != null)
+		if (isMultiplayer && Net.selectedGameMode != null && misGameMode != "soccer")
 			misGameMode = Net.selectedGameMode;
 
 		this.gameMode = GameModeFactory.getGameMode(cast this, misGameMode);
@@ -281,6 +282,7 @@ class MarbleWorld extends Scheduler {
 		this.isRecording = record;
 		this.rewindManager = new RewindManager(cast this);
 		this.inputRecorder = new InputRecorder(cast this);
+		this.playtestPointManager = new PlaytestPointManager(cast this);
 		if (this.isMultiplayer) {
 			isRecording = false;
 			isWatching = false;
@@ -347,6 +349,9 @@ class MarbleWorld extends Scheduler {
 		};
 		this.mission.load();
 		scanMission(this.mission.root);
+		if (this.mission.isLocal) {
+			this.playtestPointManager.scanMission(this.mission.root);
+		}
 		this.gameMode.missionScan(this.mission);
 		this.resourceLoadFuncs.push(fwd -> this.initScene(fwd));
 		if (this.isMultiplayer) {
@@ -681,7 +686,9 @@ class MarbleWorld extends Scheduler {
 		this.cancel(this.oobSchedule);
 		this.cancel(this.marble.oobSchedule);
 
-		var startquat = this.gameMode.getSpawnTransform();
+		var startquat = this.gameMode.getInitialSpawnTransform(this.marble);
+		if (startquat == null)
+			startquat = this.gameMode.getSpawnTransform();
 
 		this.marble.setMarblePosition(startquat.position.x, startquat.position.y, startquat.position.z);
 		this.marble.reset();
@@ -700,7 +707,9 @@ class MarbleWorld extends Scheduler {
 		if (isMultiplayer) {
 			for (client => marble in clientMarbles) {
 				this.cancel(marble.oobSchedule);
-				var marbleStartQuat = this.gameMode.getSpawnTransform();
+				var marbleStartQuat = this.gameMode.getInitialSpawnTransform(marble);
+				if (marbleStartQuat == null)
+					marbleStartQuat = this.gameMode.getSpawnTransform();
 				marble.setMarblePosition(marbleStartQuat.position.x, marbleStartQuat.position.y, marbleStartQuat.position.z);
 				marble.reset();
 				marble.setMode(Start);
@@ -960,6 +969,8 @@ class MarbleWorld extends Scheduler {
 			var chk = new CheckpointTrigger(element, cast this);
 			trigger = chk;
 			chk.simGroup = simGroup;
+		} else if (datablockLowercase == "soccertrigger") {
+			trigger = new triggers.SoccerGoalTrigger(element, cast this);
 		} else {
 			Console.error("Unknown trigger: " + element.datablock);
 			onFinish();
@@ -1606,6 +1617,10 @@ class MarbleWorld extends Scheduler {
 		// 	performRestart();
 		// 	return;
 		// }
+
+		if (!this.isWatching && this.finishTime == null) {
+			this.playtestPointManager.update(dt);
+		}
 
 		// if ((Key.isDown(Settings.controlsSettings.respawn)
 		// 	|| MarbleGame.instance.touchInput.restartButton.pressed
@@ -2288,7 +2303,7 @@ class MarbleWorld extends Scheduler {
 					name: "Player",
 					time: this.gameMode.getFinishScore()
 				};
-				if (!this.cheatsUsed)
+				if (!this.cheatsUsed && !mission.isLocal)
 					Settings.saveScore(misPath, myScore, this.gameMode.getScoreType());
 				var notifies = AchievementsGui.check();
 				var delay = 5.0;
@@ -2370,6 +2385,7 @@ class MarbleWorld extends Scheduler {
 						var pmg = new LevelSelectGui(["beginner", "intermediate", "advanced", "multiplayer"][mission.difficultyIndex]);
 						MarbleGame.canvas.setContent(pmg);
 					}
+					LocalLevelLoader.notifyExitLevel();
 				}
 				#if js
 				pointercontainer.hidden = false;
@@ -2731,6 +2747,9 @@ class MarbleWorld extends Scheduler {
 		}
 
 		CollisionPool.freeMemory();
+
+		if (this.gameMode != null)
+			this.gameMode.onDispose();
 
 		radar.dispose();
 

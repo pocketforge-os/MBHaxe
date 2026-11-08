@@ -204,6 +204,7 @@ class Marble extends GameObject {
 	public var camera:CameraController;
 	public var cameraObject:Object;
 	public var controllable:Bool = false;
+	public var startInvulnerable:Bool = true;
 
 	public var collider:SphereCollisionEntity;
 
@@ -214,6 +215,7 @@ class Marble extends GameObject {
 	public var collisionWorld:CollisionWorld;
 
 	public var _radius = 0.2;
+	public var _defaultRadius = 0.3;
 
 	var _prevRadius:Float;
 	var _renderScale:Float = 1;
@@ -233,6 +235,7 @@ class Marble extends GameObject {
 	var _minBounceSpeed:Float = 3;
 	var _minTrailVel:Float = 15;
 	var _bounceKineticFriction = 0.2;
+	var _megaImpactForceMult = 1.0;
 	var minVelocityBounceSoft = 2.5;
 	var minVelocityBounceHard = 12.0;
 	var bounceMinGain = 0.2;
@@ -269,6 +272,7 @@ class Marble extends GameObject {
 	var queuedContacts:Array<CollisionInfo> = [];
 	var appliedImpulses:Array<{impulse:Vector, contactImpulse:Bool}> = [];
 
+	public var canPickupPowerups = true;
 	public var heldPowerup:PowerUp;
 	public var lastContactNormal:Vector = new Vector(0, 0, 0);
 	public var lastContactPosition:Vector = new Vector(0, 0, 0);
@@ -873,7 +877,7 @@ class Marble extends GameObject {
 		return true;
 	}
 
-	function velocityCancel(currentTime:Float, dt:Float, surfaceSlide:Bool, noBounce:Bool, stoppedPaths:Bool, pi:Array<PathedInterior>) {
+	function velocityCancel(timeState:TimeState, currentTime:Float, dt:Float, surfaceSlide:Bool, noBounce:Bool, stoppedPaths:Bool, pi:Array<PathedInterior>) {
 		var SurfaceDotThreshold = 0.0001;
 		var looped = false;
 		var itersIn = 0;
@@ -907,7 +911,11 @@ class Marble extends GameObject {
 						var dp = this.velocity.multiply(ourMass).sub(otherMarble.velocity.multiply(theirMass));
 						var normP = contacts[i].normal.multiply(dp.dot(contacts[i].normal));
 
-						normP.scale(1 + bounce);
+						var mult = 1.0;
+						if (this.isMegaMarbleEnabled(timeState) || otherMarble.isMegaMarbleEnabled(timeState))
+							mult *= this._megaImpactForceMult * otherMarble._megaImpactForceMult;
+
+						normP.scale((1 + bounce) * mult);
 
 						velocity.load(velocity.sub(normP.multiply(1 / ourMass)));
 						if (Math.isNaN(velocity.lengthSq())) {
@@ -1650,7 +1658,8 @@ class Marble extends GameObject {
 
 			var ticks = Net.isClient ? serverTicks : timeState.ticks;
 
-			if ((ticks - this.level.serverStartTicks) < (10000 >> 5)) // 10 seconds marble collision invulnerability - competitive mode needs this
+			if (this.startInvulnerable
+				&& (ticks - this.level.serverStartTicks) < (10000 >> 5)) // 10 seconds marble collision invulnerability - competitive mode needs this
 				this.collider.ignore = true;
 			else
 				this.collider.ignore = false;
@@ -1692,7 +1701,7 @@ class Marble extends GameObject {
 			var desiredOmega = new Vector();
 			var isCentered = this.computeMoveForces(m, aControl, desiredOmega);
 
-			stoppedPaths = this.velocityCancel(timeState.currentAttemptTime, timeStep, isCentered, false, stoppedPaths, pathedInteriors);
+			stoppedPaths = this.velocityCancel(timeState, timeState.currentAttemptTime, timeStep, isCentered, false, stoppedPaths, pathedInteriors);
 			var A = this.getExternalForces(tempState, m);
 			var a = this.applyContactForces(timeStep, m, isCentered, aControl, desiredOmega, A);
 
@@ -1710,7 +1719,7 @@ class Marble extends GameObject {
 			if (this.mode == Start) {
 				this.velocity.set(0, 0, 0);
 			}
-			stoppedPaths = this.velocityCancel(timeState.currentAttemptTime, timeStep, isCentered, true, stoppedPaths, pathedInteriors);
+			stoppedPaths = this.velocityCancel(timeState, timeState.currentAttemptTime, timeStep, isCentered, true, stoppedPaths, pathedInteriors);
 			this._totalTime += timeStep;
 			if (contacts.length != 0) {
 				this._contactTime += timeStep;
@@ -1838,7 +1847,7 @@ class Marble extends GameObject {
 					this._radius = 0.675;
 					this.collider.radius = 0.675;
 				} else if ((timeState.ticks - this.megaMarbleUseTick) > this.megaMarbleDuration) {
-					this.collider.radius = this._radius = 0.3;
+					this.collider.radius = this._radius = this._defaultRadius;
 					if (!this.isNetUpdate && this.controllable)
 						AudioManager.playSound(ResourceLoader.getResource("data/sound/MegaShrink.wav", ResourceLoader.getAudio, this.soundResources), null,
 							false);
@@ -1851,7 +1860,7 @@ class Marble extends GameObject {
 					this._radius = 0.675;
 					this.collider.radius = 0.675;
 				} else {
-					this.collider.radius = this._radius = 0.3;
+					this.collider.radius = this._radius = this._defaultRadius;
 					if (!this.isNetUpdate && this.controllable)
 						AudioManager.playSound(ResourceLoader.getResource("data/sound/MegaShrink.wav", ResourceLoader.getAudio, this.soundResources), null,
 							false);
@@ -1860,7 +1869,7 @@ class Marble extends GameObject {
 			}
 		}
 		if (Net.isClient && this.megaMarbleUseTick == 0) {
-			this.collider.radius = this._radius = 0.3;
+			this.collider.radius = this._radius = this._defaultRadius;
 		}
 
 		if (Net.isMP) {
@@ -1966,8 +1975,14 @@ class Marble extends GameObject {
 			}
 		}
 		if (p.netFlags & MarbleNetFlags.UpdatePosition > 0) {
-			this.oldPos.load(p.position);
-			this.newPos.load(p.position);
+			if (this.oldPos != null)
+				this.oldPos.load(p.position);
+			else
+				this.oldPos = p.position.clone();
+			if (this.newPos != null)
+				this.newPos.load(p.position);
+			else
+				this.newPos = p.position.clone();
 			this.netSmoothOffset.set(0, 0, 0);
 			this.lastRenderPos.load(p.position);
 			this.justWarped = true;
@@ -2150,6 +2165,13 @@ class Marble extends GameObject {
 		move.d.x = Gamepad.getAxis(Settings.gamepadSettings.moveYAxis);
 		move.d.y = -Gamepad.getAxis(Settings.gamepadSettings.moveXAxis);
 
+		var moveLen = Math.sqrt(move.d.x * move.d.x + move.d.y * move.d.y);
+		if (moveLen > 0.00001) {
+			var scaled = Math.min(moveLen / Settings.gamepadSettings.outerDeadzone, 1);
+			move.d.x *= scaled / moveLen;
+			move.d.y *= scaled / moveLen;
+		}
+
 		if (Settings.controlsSettings.moddedController) {
 			// we need to scale the moves to square instead of circle
 			var moveLen = Math.sqrt(move.d.x * move.d.x + move.d.y * move.d.y);
@@ -2165,6 +2187,17 @@ class Marble extends GameObject {
 					move.d.x = normalizedX / scaleFactor * moveLen;
 					move.d.y = normalizedY / scaleFactor * moveLen;
 				}
+			}
+		}
+
+		if (Settings.controlsSettings.eightWayController) {
+			var ang = Math.atan2(move.d.y, move.d.x);
+
+			if (move.d.x != 0 || move.d.y != 0) {
+				var ang = Math.atan2(move.d.y, move.d.x);
+				var step = Math.round(ang / (Math.PI / 4)); // -4..4
+				move.d.x = Math.round(Math.cos(step * Math.PI / 4));
+				move.d.y = Math.round(Math.sin(step * Math.PI / 4));
 			}
 		}
 

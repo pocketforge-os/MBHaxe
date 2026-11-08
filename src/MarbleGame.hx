@@ -36,6 +36,7 @@ import src.Debug;
 import src.Gamepad;
 import src.PreviewWorld;
 import src.Leaderboards;
+import src.LocalLevelLoader;
 
 @:publicFields
 class MarbleGame {
@@ -418,9 +419,11 @@ class MarbleGame {
 		}
 
 		Settings.save();
+		LocalLevelLoader.notifyExitLevel();
 	}
 
 	public function playMission(mission:Mission, multiplayer:Bool = false) {
+		paused = false;
 		canvas.clearContent();
 		destroyPreviewWorld();
 		if (world != null) {

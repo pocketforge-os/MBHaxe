@@ -72,8 +72,19 @@ class MoveManager {
 	}
 
 	public function recordMove(marble:Marble, motionDir:Vector, timeState:TimeState, serverTicks:Int) {
+		if (Net.isClient && ackRTT >= 0) {
+			var excessMoveCount = queuedMoves.length - ackRTT;
+			if (excessMoveCount > 12) {
+				queuedMoves.resize(0); // clear everything
+				stall = false;
+			} else if (excessMoveCount > 4) {
+				stall = true;
+			} else {
+				stall = false;
+			}
+		}
 		if (queuedMoves.length >= maxMoves) {
-			queuedMoves.shift();
+			return queuedMoves[queuedMoves.length - 1];
 		}
 		if (stall) {
 			// FPS too low: don't record new input
@@ -84,6 +95,13 @@ class MoveManager {
 		if (!MarbleGame.instance.paused) {
 			move.d.x = Gamepad.getAxis(Settings.gamepadSettings.moveYAxis);
 			move.d.y = -Gamepad.getAxis(Settings.gamepadSettings.moveXAxis);
+
+			var moveLen = Math.sqrt(move.d.x * move.d.x + move.d.y * move.d.y);
+			if (moveLen > 0.00001) {
+				var scaled = Math.min(moveLen / Settings.gamepadSettings.outerDeadzone, 1);
+				move.d.x *= scaled / moveLen;
+				move.d.y *= scaled / moveLen;
+			}
 
 			if (Settings.controlsSettings.moddedController) {
 				// we need to scale the moves to square instead of circle
@@ -100,6 +118,17 @@ class MoveManager {
 						move.d.x = normalizedX / scaleFactor * moveLen;
 						move.d.y = normalizedY / scaleFactor * moveLen;
 					}
+				}
+			}
+
+			if (Settings.controlsSettings.eightWayController) {
+				var ang = Math.atan2(move.d.y, move.d.x);
+
+				if (move.d.x != 0 || move.d.y != 0) {
+					var ang = Math.atan2(move.d.y, move.d.x);
+					var step = Math.round(ang / (Math.PI / 4)); // -4..4
+					move.d.x = Math.round(Math.cos(step * Math.PI / 4));
+					move.d.y = Math.round(Math.sin(step * Math.PI / 4));
 				}
 			}
 
@@ -170,7 +199,7 @@ class MoveManager {
 		return netMove;
 	}
 
-	function copyMove(to:Int, from:Int) {
+	inline function copyMove(to:Int, from:Int) {
 		queuedMoves[to].move = queuedMoves[from].move;
 		queuedMoves[to].motionDir.load(queuedMoves[from].motionDir);
 	}
@@ -239,7 +268,7 @@ class MoveManager {
 					&& queuedMoves.length > serverTargetMoveListSize)) {
 				var dropAmt = queuedMoves.length - serverTargetMoveListSize;
 				while (dropAmt-- > 0) {
-					queuedMoves.pop();
+					queuedMoves.shift();
 				}
 				serverAvgMoveListSize = serverTargetMoveListSize;
 			}
